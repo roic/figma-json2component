@@ -1,5 +1,5 @@
 // src/core/tokenMapper.ts
-import type { Schema, ChildNode, ComponentBase, StyleProps } from '../types/schema';
+import type { Schema, ChildNode, StyleProps } from '../types/schema';
 
 export interface TokenWarning {
   token: string;
