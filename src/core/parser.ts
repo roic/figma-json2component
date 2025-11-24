@@ -159,6 +159,16 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
     errors.push(...baseErrors.errors);
     warnings.push(...baseErrors.warnings);
   }
+  if (s.base && typeof s.base === 'object') {
+    const base = s.base as Record<string, unknown>;
+    if (base.children && Array.isArray(base.children)) {
+      base.children.forEach((child, i) => {
+        const childErrors = validateChildNode(child, `${path}.base.children[${i}]`);
+        errors.push(...childErrors.errors);
+        warnings.push(...childErrors.warnings);
+      });
+    }
+  }
   if (!Array.isArray(s.variants)) {
     errors.push({ path, message: "Missing required field 'variants' (array)" });
   } else {

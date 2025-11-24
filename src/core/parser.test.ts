@@ -89,6 +89,27 @@ describe('parseSchema componentSets', () => {
     expect(result.valid).toBe(true);
     expect(result.schema?.componentSets).toHaveLength(1);
   });
+
+  it('returns error for invalid children in componentSet base', () => {
+    const json = JSON.stringify({
+      componentSets: [{
+        id: 'button',
+        name: 'Button',
+        variantProps: ['type'],
+        base: {
+          layout: { direction: 'horizontal' },
+          children: [
+            { nodeType: 'text', name: 'Label' } // missing id
+          ]
+        },
+        variants: [{ props: { type: 'primary' } }]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes("'id'"))).toBe(true);
+  });
 });
 
 describe('parseSchema child nodes', () => {
