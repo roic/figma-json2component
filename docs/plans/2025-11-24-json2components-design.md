@@ -15,6 +15,13 @@ A Figma plugin that generates components (with nested hierarchies and variants) 
 | Nesting | Full support with auto dependency resolution |
 | Token types | Colors, radius, typography, shadows, spacing |
 | Conflict handling | Full overwrite (JSON is temporary) |
+| Identifiers | Stable `id` fields for all components and nodes |
+
+## Overwrite Behavior
+
+**Components created by this plugin are fully owned by the JSON definition.** On re-generation, their internal structure and styles are completely replaced. Designers should treat generated components as artifacts during the bootstrapping phase, not hand-tweaked pieces.
+
+The plugin uses stable `id` fields (stored in Figma pluginData) to identify which components to overwrite. This survives Figma layer renames.
 
 ## JSON Schema
 
@@ -34,6 +41,7 @@ A Figma plugin that generates components (with nested hierarchies and variants) 
 
 ```json
 {
+  "id": "button",
   "name": "Button",
   "description": "Action buttons",
   "variantProps": ["type", "state"],
@@ -49,12 +57,21 @@ A Figma plugin that generates components (with nested hierarchies and variants) 
 }
 ```
 
-Variants inherit everything from `base` and only override what's different.
+**Fields:**
+- `id` (required) - stable identifier, used for references and pluginData
+- `name` (required) - human-friendly Figma layer name (can be changed)
+- `description` (optional) - component description
+- `variantProps` (required) - array of variant property names; each becomes a Figma variant property
+- `base` (required) - shared layout, tokens, and children inherited by all variants
+- `variants` (required) - array of variant definitions; each overrides base properties
+
+Variants inherit everything from `base` and only override what's different (root-level tokens only).
 
 ### Standalone Component
 
 ```json
 {
+  "id": "chatbox",
   "name": "ChatBox",
   "description": "Message input with send button",
   "layout": { ... },
@@ -63,24 +80,29 @@ Variants inherit everything from `base` and only override what's different.
 }
 ```
 
+**Fields:**
+- `id` (required) - stable identifier
+- `name` (required) - Figma layer name
+- `description` (optional) - component description
+- `layout` (required) - layout properties
+- `children` (optional) - array of child nodes
+
 ### Layout Properties
 
 ```json
 {
   "layout": {
-    "direction": "horizontal" | "vertical",
+    "direction": "horizontal",
     "padding": 12,
-    "paddingToken": "spacing.md",
     "paddingTop": 8,
     "paddingRight": 8,
     "paddingBottom": 8,
     "paddingLeft": 8,
     "gap": 8,
-    "gapToken": "spacing.sm",
-    "alignItems": "center" | "start" | "end" | "stretch",
-    "justifyContent": "start" | "center" | "end" | "space-between",
-    "width": 120 | "fill" | "hug",
-    "height": 40 | "fill" | "hug"
+    "alignItems": "center",
+    "justifyContent": "center",
+    "width": 120,
+    "height": 40
   },
   "fillToken": "color.bg.primary",
   "strokeToken": "color.border.default",
@@ -90,31 +112,52 @@ Variants inherit everything from `base` and only override what's different.
 }
 ```
 
+**Layout fields:**
+- `direction` - `"horizontal"` | `"vertical"` (maps to Figma `layoutMode`)
+- `padding` - uniform padding (number), OR use per-side values
+- `paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft` - per-side padding
+- `paddingToken` - token for uniform padding (mutually exclusive with `padding`)
+- `gap` - item spacing (number)
+- `gapToken` - token for gap (mutually exclusive with `gap`)
+- `alignItems` - `"center"` | `"start"` | `"end"` | `"stretch"` (maps to `counterAxisAlignItems`)
+- `justifyContent` - `"start"` | `"center"` | `"end"` | `"space-between"` (maps to `primaryAxisAlignItems`)
+- `width`, `height` - see sizing rules below
+
+**Sizing rules (maps to Figma auto-layout sizing):**
+- `"fill"` → `layoutSizingHorizontal/Vertical = "FILL"` (fill parent)
+- `"hug"` → `layoutSizingHorizontal/Vertical = "HUG"` (fit content)
+- `120` (number) → `layoutSizingHorizontal/Vertical = "FIXED"` with explicit size
+
+**Token vs raw value rule:**
+Specifying both a raw value and a token for the same property is a **schema validation error**:
+```
+Error: Component "button" specifies both "padding" and "paddingToken". Use one or the other.
+```
+
 ### Node Types
 
 | `nodeType` | Description |
 |------------|-------------|
 | `"frame"` | Nested frame with its own layout and children |
 | `"text"` | Text node with optional content |
-| `"instance"` | Instance of another component (by `ref` name) |
+| `"instance"` | Instance of another component (by `ref` id) |
 | `"rectangle"` | Simple rectangle (for dividers, backgrounds) |
 
-### Instance Node
+### Frame Node
 
 ```json
 {
-  "nodeType": "instance",
-  "ref": "Button",
-  "variantProps": {
-    "type": "primary",
-    "state": "default"
-  },
-  "overrides": {
-    "Label": "Submit"
-  },
+  "nodeType": "frame",
+  "id": "icon-wrapper",
+  "name": "IconWrapper",
   "layout": {
-    "width": "fill"
-  }
+    "direction": "horizontal",
+    "padding": 4,
+    "alignItems": "center"
+  },
+  "fillToken": "color.bg.subtle",
+  "radiusToken": "radius.sm",
+  "children": [...]
 }
 ```
 
@@ -123,6 +166,7 @@ Variants inherit everything from `base` and only override what's different.
 ```json
 {
   "nodeType": "text",
+  "id": "label-text",
   "name": "Label",
   "text": "Button",
   "textStyleToken": "typography.button.label",
@@ -130,23 +174,117 @@ Variants inherit everything from `base` and only override what's different.
 }
 ```
 
+**Fields:**
+- `id` (required) - stable identifier for overrides
+- `name` (required) - Figma layer name
+- `text` (optional) - text content, defaults to empty string
+- `textStyleToken` (optional) - Figma text style name
+- `fillToken` (optional) - text color variable
+
+### Instance Node
+
+```json
+{
+  "nodeType": "instance",
+  "id": "send-button",
+  "ref": "button",
+  "variantProps": {
+    "type": "primary",
+    "state": "default"
+  },
+  "overrides": {
+    "label-text": { "text": "Submit" }
+  },
+  "layout": {
+    "width": "fill"
+  }
+}
+```
+
+**Fields:**
+- `id` (optional) - stable identifier for this instance
+- `ref` (required) - references component/componentSet by `id` (not name)
+- `variantProps` (optional) - if ref is a componentSet, specifies which variant
+- `overrides` (optional) - keyed by child node `id`, see override rules below
+- `layout` (optional) - sizing overrides for the instance
+
+**Reference resolution:**
+1. Plugin looks up `ref` value against all component and componentSet `id` fields
+2. If it's a componentSet and `variantProps` is specified → finds exact variant match
+3. If it's a componentSet and no `variantProps` → uses first variant (default)
+
+### Rectangle Node
+
+```json
+{
+  "nodeType": "rectangle",
+  "id": "divider",
+  "name": "Divider",
+  "layout": {
+    "width": "fill",
+    "height": 1
+  },
+  "fillToken": "color.border.subtle"
+}
+```
+
+Rectangles are purely visual elements with no children.
+
+### Override Rules (v1)
+
+**v1 supports text content overrides only:**
+
+```json
+"overrides": {
+  "label-text": { "text": "Submit" }
+}
+```
+
+- Keys are child node `id` values (not names)
+- Values specify what to override
+- v1 limitation: only `text` property can be overridden
+
+**Not supported in v1:**
+- Token overrides on instances
+- Visibility toggles
+- Nested/deep overrides
+
+Workaround: if you need different styling per instance, create separate variants.
+
 ## Dependency Resolution
 
 The plugin auto-resolves dependencies:
 
 1. Parse the entire JSON file
-2. Build a dependency graph (which components reference which)
+2. Build a dependency graph: any `instance` node with `ref: "X"` implies a dependency on component/componentSet with `id: "X"`
 3. Topologically sort to determine build order
-4. Generate leaf components first, then composites
+4. Generate leaf components first (no dependencies), then composites
 
-Circular dependencies are detected and reported as errors.
+**Circular dependency detection:**
+If Button references ChatBox which references Button → error:
+```
+Circular dependency detected: button → chatbox → button
+```
 
 ## Token Resolution
 
-- Any property ending in `Token` gets resolved to a Figma variable
+**Token types and what they map to:**
+
+| Token property | Figma target |
+|----------------|--------------|
+| `fillToken` | Figma color variable |
+| `strokeToken` | Figma color variable |
+| `radiusToken` | Figma number variable |
+| `shadowToken` | Figma effect variable |
+| `paddingToken` | Figma number variable |
+| `gapToken` | Figma number variable |
+| `textStyleToken` | Figma text style (not variable) |
+
+**Resolution rules:**
 - Exact name match: `fillToken: "color.button.primary.bg"` → variable named `color.button.primary.bg`
-- All tokens resolved upfront before generation (fail fast)
-- Missing token → warning (generates anyway with no fill/style applied)
+- All tokens resolved upfront before generation begins
+- Missing token → **warning** (generates anyway with no fill/style applied)
+- Plugin does NOT fail on missing tokens; shows warnings in UI
 
 ## Plugin UI
 
@@ -166,7 +304,7 @@ Circular dependencies are detected and reported as errors.
 │  ☑ Input (component set)        │
 │    └─ 3 variants                │
 │  ☑ ChatBox (component)          │
-│    └─ depends on: Button, Input │
+│    └─ depends on: button, input │
 ├─────────────────────────────────┤
 │  Token status:                  │
 │  ✓ 12 tokens resolved           │
@@ -182,16 +320,22 @@ Circular dependencies are detected and reported as errors.
 
 1. Click "Select JSON File" → native file picker
 2. Plugin parses, validates, shows component list with dependency info
-3. Shows token resolution status (found/missing)
+3. Shows token resolution status (found/missing as warnings)
 4. User reviews, clicks "Generate"
 5. Components created on current page, positioned in a grid
+6. Plugin stores `id` in pluginData on each generated component
 
 ## Error Handling
 
-- Invalid JSON → show parse error with line number
-- Missing required fields → "Component 'X' missing 'name' field"
-- Missing token → warning (generates anyway with no fill/style applied)
-- Circular dependency → blocks generation with clear error
+| Error type | Behavior |
+|------------|----------|
+| Invalid JSON syntax | Show parse error with line number |
+| Missing required field | "Component at index 2 missing 'id' field" |
+| Duplicate id | "Duplicate id 'button' found" |
+| Both token and raw value | "Component 'button' specifies both 'padding' and 'paddingToken'" |
+| Missing token | **Warning only** - generates with no fill/style applied |
+| Unknown ref | "Instance references unknown id 'foo'" |
+| Circular dependency | Blocks generation with clear error message |
 
 ## Technical Architecture
 
@@ -209,7 +353,7 @@ figma-json2component/
 │   ├── core/
 │   │   ├── parser.ts       # JSON parsing & validation
 │   │   ├── resolver.ts     # Dependency graph & topological sort
-│   │   ├── tokenMapper.ts  # Token name → Figma variable lookup
+│   │   ├── tokenMapper.ts  # Token name → Figma variable/style lookup
 │   │   └── generator.ts    # Build Figma nodes from definitions
 │   └── utils/
 │       └── figmaHelpers.ts # Wrappers for Figma API calls
@@ -220,11 +364,18 @@ figma-json2component/
 ## Data Flow
 
 ```
-JSON File → parser.ts (validate)
-         → resolver.ts (dependency order)
-         → tokenMapper.ts (resolve all tokens upfront)
-         → generator.ts (create Figma nodes)
+JSON File → parser.ts (validate schema, check for conflicts)
+         → resolver.ts (build dependency graph, topological sort)
+         → tokenMapper.ts (resolve all tokens upfront, collect warnings)
+         → generator.ts (create Figma nodes, store pluginData)
 ```
+
+## Testing Strategy
+
+The schema is pure JSON and logic is cleanly separated, enabling unit tests without Figma:
+- `parser.ts` - test validation rules, error messages
+- `resolver.ts` - test dependency ordering, cycle detection
+- `tokenMapper.ts` - test token lookup logic (mock Figma API)
 
 ## Complete JSON Example
 
@@ -232,6 +383,7 @@ JSON File → parser.ts (validate)
 {
   "componentSets": [
     {
+      "id": "button",
       "name": "Button",
       "description": "Action buttons",
       "variantProps": ["type", "state"],
@@ -249,6 +401,7 @@ JSON File → parser.ts (validate)
         "children": [
           {
             "nodeType": "text",
+            "id": "label-text",
             "name": "Label",
             "text": "Button",
             "textStyleToken": "typography.button.label"
@@ -264,6 +417,7 @@ JSON File → parser.ts (validate)
   ],
   "components": [
     {
+      "id": "chatbox",
       "name": "ChatBox",
       "description": "Message input with send button",
       "layout": {
@@ -280,14 +434,16 @@ JSON File → parser.ts (validate)
       "children": [
         {
           "nodeType": "instance",
-          "ref": "Input",
+          "id": "message-input",
+          "ref": "input",
           "layout": { "width": "fill" }
         },
         {
           "nodeType": "instance",
-          "ref": "Button",
+          "id": "send-button",
+          "ref": "button",
           "variantProps": { "type": "primary", "state": "default" },
-          "overrides": { "Label": "Send" }
+          "overrides": { "label-text": { "text": "Send" } }
         }
       ]
     }
@@ -295,11 +451,21 @@ JSON File → parser.ts (validate)
 }
 ```
 
-## Out of Scope (Explicitly Not Building)
+## v1 Limitations (Documented)
+
+These are explicitly not supported in v1:
+
+| Limitation | Workaround |
+|------------|------------|
+| Variant-level child overrides | Restructure token naming or create separate components |
+| Instance token overrides | Create additional variants |
+| Visibility toggles | Not supported |
+| Load from URL | Use file picker |
+| Dry run / preview mode | Review component list before generating |
+
+## Out of Scope (Not Building)
 
 - Round-trip sync (Figma → JSON)
 - Token management (Tokens Studio handles this)
-- Load from URL
 - Partial/incremental updates
-- Checksum tracking
 - Change detection/diffing
