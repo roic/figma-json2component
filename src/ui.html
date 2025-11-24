@@ -1,0 +1,147 @@
+<!-- src/ui.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 12px;
+      padding: 16px;
+      color: #333;
+    }
+    h1 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .section {
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+    .file-picker {
+      width: 100%;
+      padding: 12px;
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .file-picker:hover {
+      border-color: #18a0fb;
+    }
+    .file-picker.has-file {
+      border-style: solid;
+      border-color: #18a0fb;
+      background: #f0f9ff;
+    }
+    .file-name {
+      font-weight: 500;
+      margin-top: 8px;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 11px;
+    }
+    .status.success { color: #1bc47d; }
+    .status.error { color: #f24822; }
+    .status.warning { color: #ffab00; }
+    .component-list {
+      max-height: 150px;
+      overflow-y: auto;
+      border: 1px solid #e5e5e5;
+      border-radius: 4px;
+    }
+    .component-item {
+      padding: 8px 12px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .component-item:last-child {
+      border-bottom: none;
+    }
+    .component-item input {
+      margin: 0;
+    }
+    .component-meta {
+      font-size: 10px;
+      color: #888;
+      margin-left: auto;
+    }
+    .warnings {
+      background: #fffbf0;
+      border: 1px solid #ffab00;
+      border-radius: 4px;
+      padding: 8px;
+      font-size: 11px;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+    .warning-item {
+      padding: 2px 0;
+      color: #996600;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button.primary {
+      background: #18a0fb;
+      color: white;
+    }
+    button.primary:hover {
+      background: #0d8de5;
+    }
+    button.primary:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>JSON2Components</h1>
+
+  <div class="section">
+    <div class="file-picker" id="filePicker">
+      <div>Click to select JSON file</div>
+      <input type="file" id="fileInput" accept=".json" style="display: none;">
+    </div>
+    <div id="fileStatus"></div>
+  </div>
+
+  <div class="section hidden" id="componentsSection">
+    <div style="font-weight: 500; margin-bottom: 8px;">Components to generate:</div>
+    <div class="component-list" id="componentList"></div>
+  </div>
+
+  <div class="section hidden" id="tokenSection">
+    <div style="font-weight: 500; margin-bottom: 8px;">Token status:</div>
+    <div id="tokenStatus"></div>
+    <div class="warnings hidden" id="tokenWarnings"></div>
+  </div>
+
+  <button class="primary" id="generateBtn" disabled>Generate Components</button>
+
+  <!-- SCRIPT -->
+</body>
+</html>
