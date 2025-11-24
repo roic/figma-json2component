@@ -1,0 +1,78 @@
+{
+  "componentSets": [
+    {
+      "id": "button",
+      "name": "Button",
+      "description": "Primary action buttons",
+      "variantProps": ["type", "state"],
+      "base": {
+        "layout": {
+          "direction": "horizontal",
+          "padding": 12,
+          "gap": 8,
+          "alignItems": "center",
+          "justifyContent": "center",
+          "height": 40,
+          "width": "hug"
+        },
+        "radiusToken": "radius.md",
+        "children": [
+          {
+            "nodeType": "text",
+            "id": "label",
+            "name": "Label",
+            "text": "Button",
+            "textStyleToken": "typography.button"
+          }
+        ]
+      },
+      "variants": [
+        { "props": { "type": "primary", "state": "default" }, "fillToken": "color.primary" },
+        { "props": { "type": "primary", "state": "hover" }, "fillToken": "color.primary.hover" },
+        { "props": { "type": "secondary", "state": "default" }, "fillToken": "color.secondary" },
+        { "props": { "type": "secondary", "state": "hover" }, "fillToken": "color.secondary.hover" }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "id": "card",
+      "name": "Card",
+      "description": "Basic card container",
+      "layout": {
+        "direction": "vertical",
+        "padding": 16,
+        "gap": 12,
+        "width": 300,
+        "height": "hug"
+      },
+      "fillToken": "color.surface",
+      "radiusToken": "radius.lg",
+      "shadowToken": "shadow.md",
+      "children": [
+        {
+          "nodeType": "text",
+          "id": "title",
+          "name": "Title",
+          "text": "Card Title",
+          "textStyleToken": "typography.heading"
+        },
+        {
+          "nodeType": "text",
+          "id": "body",
+          "name": "Body",
+          "text": "Card body content goes here.",
+          "textStyleToken": "typography.body"
+        },
+        {
+          "nodeType": "instance",
+          "id": "action-button",
+          "name": "ActionButton",
+          "ref": "button",
+          "variantProps": { "type": "primary", "state": "default" },
+          "overrides": { "label": { "text": "Action" } }
+        }
+      ]
+    }
+  ]
+}
