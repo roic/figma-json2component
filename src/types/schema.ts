@@ -59,8 +59,10 @@ export interface TextNode extends BaseNode {
   fillToken?: string;
 }
 
-export interface InstanceNode extends BaseNode {
+export interface InstanceNode {
   nodeType: 'instance';
+  id?: string;
+  name: string;
   ref: string;
   variantProps?: Record<string, string>;
   overrides?: Record<string, { text?: string }>;
