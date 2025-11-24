@@ -38,24 +38,6 @@ export function resolveDependencies(schema: Schema): ResolveResult {
   });
 
   // Topological sort using Kahn's algorithm
-  const inDegree = new Map<string, number>();
-  allIds.forEach(id => inDegree.set(id, 0));
-
-  dependencies.forEach((deps, _id) => {
-    deps.forEach(dep => {
-      inDegree.set(dep, (inDegree.get(dep) || 0) + 1);
-    });
-  });
-
-  // Wait, that's backwards. Let me fix the direction.
-  // If A depends on B, then B must come before A.
-  // So edge is A -> B means "A depends on B"
-  // In topo sort, we want nodes with no incoming edges first.
-  // But our dependencies map has A -> {B, C} meaning A depends on B and C.
-  // So the edge direction is A <- B (B must come before A).
-  // We need to reverse: B has an outgoing edge to A.
-
-  // Rebuild with correct direction
   const graph = new Map<string, Set<string>>(); // node -> nodes that depend on it
   allIds.forEach(id => graph.set(id, new Set()));
 
