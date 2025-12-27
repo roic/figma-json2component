@@ -17,9 +17,11 @@ A Figma plugin that generates components from JSON schema with design token refe
 
 ## JSON Schema
 
-See `examples/buttons.json` for a complete example.
+**📖 [Complete Schema Reference Guide](docs/SCHEMA.md)** - Comprehensive specification with examples
 
-See `docs/plans/2025-11-24-json2components-design.md` for full schema documentation.
+**📄 Example:** See `examples/buttons.json` for a working example
+
+**🎨 Design Spec:** See `docs/plans/2025-11-24-json2components-design.md` for architecture details
 
 ## Usage
 
