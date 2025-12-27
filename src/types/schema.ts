@@ -95,6 +95,9 @@ export interface ComponentSetDefinition {
   id: string;
   name: string;
   description?: string;
+  storybook?: string;
+  category?: string;
+  tags?: string[];
   variantProps: string[];
   base: ComponentBase;
   variants: Variant[];
@@ -104,6 +107,9 @@ export interface ComponentDefinition extends StyleProps {
   id: string;
   name: string;
   description?: string;
+  storybook?: string;
+  category?: string;
+  tags?: string[];
   layout: LayoutProps;
   children?: ChildNode[];
 }
