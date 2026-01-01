@@ -319,6 +319,8 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
   }
   if (!Array.isArray(s.variants)) {
     errors.push({ path, message: "Missing required field 'variants' (array)" });
+  } else if (s.variants.length === 0) {
+    errors.push({ path: `${path}.variants`, message: 'componentSet must have at least one variant' });
   } else {
     s.variants.forEach((v, i) => {
       if (typeof v !== 'object' || !v || !('props' in (v as object))) {

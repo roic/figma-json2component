@@ -110,6 +110,24 @@ describe('parseSchema componentSets', () => {
     expect(result.valid).toBe(false);
     expect(result.errors.some(e => e.message.includes("'id'"))).toBe(true);
   });
+
+  it('returns error for componentSet with empty variants array', () => {
+    const json = JSON.stringify({
+      componentSets: [{
+        id: 'button',
+        name: 'Button',
+        variantProps: ['type'],
+        base: {
+          layout: { direction: 'horizontal' }
+        },
+        variants: []
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('at least one variant'))).toBe(true);
+  });
 });
 
 describe('parseSchema child nodes', () => {
