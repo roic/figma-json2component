@@ -1,4 +1,6 @@
-# JSON2Components
+# JASOTI
+
+**JSON As Source Of Truth for Interfaces**
 
 A Figma plugin that generates components from JSON schema with design token references.
 

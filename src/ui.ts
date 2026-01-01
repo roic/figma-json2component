@@ -25,39 +25,57 @@ const generateBtn = document.getElementById('generateBtn') as HTMLButtonElement;
 filePicker.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', async (e) => {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  if (!file) return;
+  const files = (e.target as HTMLInputElement).files;
+  if (!files || files.length === 0) return;
 
   try {
-    const text = await file.text();
-    handleJsonContent(text, file.name);
+    // Read all selected files
+    const fileContents: string[] = [];
+    const fileNames: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const text = await file.text();
+      fileContents.push(text);
+      fileNames.push(file.name);
+    }
+
+    handleJsonContents(fileContents, fileNames);
   } catch (err) {
-    showFileError('Failed to read file');
+    showFileError('Failed to read file(s)');
   }
 });
 
-function handleJsonContent(jsonString: string, fileName: string) {
-  // For now, just parse and show basic info
+function handleJsonContents(jsonStrings: string[], fileNames: string[]) {
+  // Parse and merge all files
   // Full validation will be done by main thread
   try {
-    const raw = JSON.parse(jsonString);
+    const allComponents: Array<{ id: string; name: string; childCount: number }> = [];
+    const allComponentSets: Array<{ id: string; name: string; variantCount: number }> = [];
 
-    // Basic extraction
-    const components = (raw.components || []).map((c: { id: string; name: string; children?: unknown[] }) => ({
-      id: c.id || 'unknown',
-      name: c.name || 'Unnamed',
-      childCount: (c.children || []).length,
-    }));
+    jsonStrings.forEach((jsonString) => {
+      const raw = JSON.parse(jsonString);
 
-    const componentSets = (raw.componentSets || []).map((s: { id: string; name: string; variants?: unknown[] }) => ({
-      id: s.id || 'unknown',
-      name: s.name || 'Unnamed',
-      variantCount: (s.variants || []).length,
-    }));
+      // Basic extraction
+      const components = (raw.components || []).map((c: { id: string; name: string; children?: unknown[] }) => ({
+        id: c.id || 'unknown',
+        name: c.name || 'Unnamed',
+        childCount: (c.children || []).length,
+      }));
+
+      const componentSets = (raw.componentSets || []).map((s: { id: string; name: string; variants?: unknown[] }) => ({
+        id: s.id || 'unknown',
+        name: s.name || 'Unnamed',
+        variantCount: (s.variants || []).length,
+      }));
+
+      allComponents.push(...components);
+      allComponentSets.push(...componentSets);
+    });
 
     currentSchema = {
-      components,
-      componentSets,
+      components: allComponents,
+      componentSets: allComponentSets,
       tokens: [], // Will be filled by main thread
       textStyles: [],
       errors: [],
@@ -66,8 +84,12 @@ function handleJsonContent(jsonString: string, fileName: string) {
 
     // Update UI
     filePicker.classList.add('has-file');
+    const fileNameDisplay = fileNames.length === 1
+      ? `📄 ${fileNames[0]}`
+      : `📁 ${fileNames.length} files selected`;
+
     fileStatus.innerHTML = `
-      <div class="file-name">📄 ${fileName}</div>
+      <div class="file-name">${fileNameDisplay}</div>
       <div class="status success">✓ Parsed successfully</div>
     `;
 
@@ -75,7 +97,7 @@ function handleJsonContent(jsonString: string, fileName: string) {
     componentsSection.classList.remove('hidden');
     componentList.innerHTML = '';
 
-    componentSets.forEach((set: { id: string; name: string; variantCount: number }) => {
+    allComponentSets.forEach((set: { id: string; name: string; variantCount: number }) => {
       componentList.innerHTML += `
         <div class="component-item">
           <input type="checkbox" checked data-id="${set.id}">
@@ -85,7 +107,7 @@ function handleJsonContent(jsonString: string, fileName: string) {
       `;
     });
 
-    components.forEach((comp: { id: string; name: string; childCount: number }) => {
+    allComponents.forEach((comp: { id: string; name: string; childCount: number }) => {
       componentList.innerHTML += `
         <div class="component-item">
           <input type="checkbox" checked data-id="${comp.id}">
@@ -101,8 +123,8 @@ function handleJsonContent(jsonString: string, fileName: string) {
 
     generateBtn.disabled = false;
 
-    // Store JSON for sending to main
-    (window as { jsonContent?: string }).jsonContent = jsonString;
+    // Store all JSON contents for sending to main
+    (window as { jsonContents?: string[] }).jsonContents = jsonStrings;
 
   } catch (err) {
     showFileError(`JSON parse error: ${(err as Error).message}`);
@@ -119,8 +141,8 @@ function showFileError(message: string) {
 }
 
 generateBtn.addEventListener('click', () => {
-  const jsonContent = (window as { jsonContent?: string }).jsonContent;
-  if (!jsonContent) return;
+  const jsonContents = (window as { jsonContents?: string[] }).jsonContents;
+  if (!jsonContents || jsonContents.length === 0) return;
 
   // Get selected component IDs
   const checkboxes = componentList.querySelectorAll('input[type="checkbox"]:checked');
@@ -130,7 +152,7 @@ generateBtn.addEventListener('click', () => {
     pluginMessage: {
       type: 'generate',
       payload: {
-        json: jsonContent,
+        jsonFiles: jsonContents,  // Now sending array of JSON strings
         selectedIds,
       }
     }

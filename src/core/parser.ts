@@ -5,6 +5,125 @@ export interface ParseResult extends ValidationResult {
   schema?: Schema;
 }
 
+/**
+ * Parse and merge multiple JSON schema files.
+ * Useful for component libraries split across multiple files.
+ */
+export function parseSchemas(jsonStrings: string[]): ParseResult {
+  if (jsonStrings.length === 0) {
+    return {
+      valid: false,
+      errors: [{ path: '', message: 'No schemas provided' }],
+      warnings: [],
+    };
+  }
+
+  // Parse each schema individually
+  const parsedSchemas: Schema[] = [];
+  const allErrors: ValidationError[] = [];
+  const allWarnings: ValidationError[] = [];
+
+  jsonStrings.forEach((jsonString, index) => {
+    const result = parseSchema(jsonString);
+    if (result.valid && result.schema) {
+      parsedSchemas.push(result.schema);
+    }
+    // Prefix errors/warnings with file index for clarity
+    allErrors.push(...result.errors.map(e => ({
+      ...e,
+      path: `[file ${index + 1}] ${e.path}`,
+    })));
+    allWarnings.push(...result.warnings.map(w => ({
+      ...w,
+      path: `[file ${index + 1}] ${w.path}`,
+    })));
+  });
+
+  // If any schema failed to parse, return errors
+  if (allErrors.length > 0) {
+    return {
+      valid: false,
+      errors: allErrors,
+      warnings: allWarnings,
+    };
+  }
+
+  // Merge all schemas and track file origins
+  const idToFileIndex = new Map<string, number>();
+
+  parsedSchemas.forEach((schema, fileIndex) => {
+    schema.components?.forEach(c => {
+      if (idToFileIndex.has(c.id)) {
+        allErrors.push({
+          path: '',
+          message: `Duplicate id '${c.id}' found in multiple files (first in file ${idToFileIndex.get(c.id)! + 1}, duplicate in file ${fileIndex + 1})`,
+        });
+      } else {
+        idToFileIndex.set(c.id, fileIndex);
+      }
+    });
+
+    schema.componentSets?.forEach(s => {
+      if (idToFileIndex.has(s.id)) {
+        allErrors.push({
+          path: '',
+          message: `Duplicate id '${s.id}' found in multiple files (first in file ${idToFileIndex.get(s.id)! + 1}, duplicate in file ${fileIndex + 1})`,
+        });
+      } else {
+        idToFileIndex.set(s.id, fileIndex);
+      }
+    });
+  });
+
+  if (allErrors.length > 0) {
+    return {
+      valid: false,
+      errors: allErrors,
+      warnings: allWarnings,
+    };
+  }
+
+  // Merge all schemas
+  const mergedSchema = mergeSchemas(parsedSchemas);
+
+  return {
+    valid: true,
+    errors: [],
+    warnings: allWarnings,
+    schema: mergedSchema,
+  };
+}
+
+/**
+ * Merge multiple schemas into one unified schema.
+ * Takes organization config from first schema that has it.
+ */
+function mergeSchemas(schemas: Schema[]): Schema {
+  const merged: Schema = {
+    components: [],
+    componentSets: [],
+  };
+
+  // Take organization from first schema that has it
+  for (const schema of schemas) {
+    if (schema.organization && !merged.organization) {
+      merged.organization = schema.organization;
+      break;
+    }
+  }
+
+  schemas.forEach(schema => {
+    if (schema.components) {
+      merged.components!.push(...schema.components);
+    }
+    if (schema.componentSets) {
+      merged.componentSets!.push(...schema.componentSets);
+    }
+  });
+
+  return merged;
+}
+
 export function parseSchema(jsonString: string): ParseResult {
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
@@ -33,6 +152,20 @@ export function parseSchema(jsonString: string): ParseResult {
 
   const schema = raw as Record<string, unknown>;
   const result: Schema = {};
+
+  // Validate organization
+  if ('organization' in schema) {
+    if (typeof schema.organization !== 'object' || schema.organization === null) {
+      errors.push({ path: 'organization', message: 'organization must be an object' });
+    } else {
+      const orgErrors = validateOrganization(schema.organization, 'organization');
+      errors.push(...orgErrors.errors);
+      warnings.push(...orgErrors.warnings);
+      if (orgErrors.errors.length === 0) {
+        result.organization = schema.organization as Organization;
+      }
+    }
+  }
 
   // Validate components
   if ('components' in schema) {
@@ -81,6 +214,11 @@ export function parseSchema(jsonString: string): ParseResult {
     seen.add(id);
   });
 
+  // Warn if schema is empty
+  if (allIds.length === 0) {
+    warnings.push({ path: '', message: 'Schema contains no components or componentSets' });
+  }
+
   return {
     valid: errors.length === 0,
     errors,
@@ -114,6 +252,11 @@ function validateComponent(comp: unknown, path: string): { errors: ValidationErr
     errors.push(...layoutErrors.errors);
     warnings.push(...layoutErrors.warnings);
   }
+
+  // Validate style props
+  const styleErrors = validateStyleProps(c, path);
+  errors.push(...styleErrors.errors);
+  warnings.push(...styleErrors.warnings);
 
   // Validate children if present
   if (c.children) {
@@ -155,12 +298,17 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
   if (!s.base || typeof s.base !== 'object') {
     errors.push({ path, message: "Missing required field 'base'" });
   } else {
-    const baseErrors = validateLayout((s.base as Record<string, unknown>).layout, `${path}.base.layout`);
+    const base = s.base as Record<string, unknown>;
+    const baseErrors = validateLayout(base.layout, `${path}.base.layout`);
     errors.push(...baseErrors.errors);
     warnings.push(...baseErrors.warnings);
-  }
-  if (s.base && typeof s.base === 'object') {
-    const base = s.base as Record<string, unknown>;
+
+    // Validate base style props
+    const baseStyleErrors = validateStyleProps(base, `${path}.base`);
+    errors.push(...baseStyleErrors.errors);
+    warnings.push(...baseStyleErrors.warnings);
+
+    // Validate base children
     if (base.children && Array.isArray(base.children)) {
       base.children.forEach((child, i) => {
         const childErrors = validateChildNode(child, `${path}.base.children[${i}]`);
@@ -175,6 +323,40 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
     s.variants.forEach((v, i) => {
       if (typeof v !== 'object' || !v || !('props' in (v as object))) {
         errors.push({ path: `${path}.variants[${i}]`, message: "Variant missing 'props'" });
+      } else {
+        const variant = v as Record<string, unknown>;
+
+        // Validate variant props match variantProps keys
+        if (Array.isArray(s.variantProps) && variant.props && typeof variant.props === 'object') {
+          const variantProps = variant.props as Record<string, unknown>;
+          const variantKeys = Object.keys(variantProps);
+          const expectedKeys = s.variantProps as string[];
+
+          // Check all expected keys are present
+          expectedKeys.forEach(key => {
+            if (!(key in variantProps)) {
+              errors.push({
+                path: `${path}.variants[${i}].props`,
+                message: `Missing required variant property '${key}'`
+              });
+            }
+          });
+
+          // Warn about extra keys
+          variantKeys.forEach(key => {
+            if (!expectedKeys.includes(key)) {
+              warnings.push({
+                path: `${path}.variants[${i}].props`,
+                message: `Unexpected variant property '${key}' (not in variantProps)`
+              });
+            }
+          });
+        }
+
+        // Validate variant style props
+        const variantStyleErrors = validateStyleProps(variant, `${path}.variants[${i}]`);
+        errors.push(...variantStyleErrors.errors);
+        warnings.push(...variantStyleErrors.warnings);
       }
     });
   }
@@ -197,16 +379,82 @@ function validateLayout(layout: unknown, path: string): { errors: ValidationErro
   if (l.padding !== undefined && l.paddingToken !== undefined) {
     errors.push({ path, message: "Cannot specify both 'padding' and 'paddingToken'" });
   }
+  if (l.paddingTop !== undefined && l.paddingTopToken !== undefined) {
+    errors.push({ path, message: "Cannot specify both 'paddingTop' and 'paddingTopToken'" });
+  }
+  if (l.paddingRight !== undefined && l.paddingRightToken !== undefined) {
+    errors.push({ path, message: "Cannot specify both 'paddingRight' and 'paddingRightToken'" });
+  }
+  if (l.paddingBottom !== undefined && l.paddingBottomToken !== undefined) {
+    errors.push({ path, message: "Cannot specify both 'paddingBottom' and 'paddingBottomToken'" });
+  }
+  if (l.paddingLeft !== undefined && l.paddingLeftToken !== undefined) {
+    errors.push({ path, message: "Cannot specify both 'paddingLeft' and 'paddingLeftToken'" });
+  }
   if (l.gap !== undefined && l.gapToken !== undefined) {
     errors.push({ path, message: "Cannot specify both 'gap' and 'gapToken'" });
+  }
+
+  // Validate wrap is boolean
+  if (l.wrap !== undefined && typeof l.wrap !== 'boolean') {
+    errors.push({ path, message: "wrap must be a boolean" });
   }
 
   return { errors, warnings };
 }
 
-function validateChildNode(node: unknown, path: string): { errors: ValidationError[]; warnings: ValidationError[] } {
+function validateStyleProps(props: unknown, path: string): { errors: ValidationError[]; warnings: ValidationError[] } {
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
+
+  if (typeof props !== 'object' || props === null) {
+    return { errors, warnings };
+  }
+
+  const p = props as Record<string, unknown>;
+
+  // Check for token/value conflicts
+  if (p.opacity !== undefined && p.opacityToken !== undefined) {
+    errors.push({ path, message: "Cannot specify both 'opacity' and 'opacityToken'" });
+  }
+  if (p.fillOpacity !== undefined && p.fillOpacityToken !== undefined) {
+    errors.push({ path, message: "Cannot specify both 'fillOpacity' and 'fillOpacityToken'" });
+  }
+
+  // Validate opacity ranges (0-1)
+  if (p.opacity !== undefined && typeof p.opacity === 'number') {
+    if (p.opacity < 0 || p.opacity > 1) {
+      errors.push({ path, message: "opacity must be between 0 and 1" });
+    }
+  }
+  if (p.fillOpacity !== undefined && typeof p.fillOpacity === 'number') {
+    if (p.fillOpacity < 0 || p.fillOpacity > 1) {
+      errors.push({ path, message: "fillOpacity must be between 0 and 1" });
+    }
+  }
+
+  // Validate strokeDash is array of numbers
+  if (p.strokeDash !== undefined) {
+    if (!Array.isArray(p.strokeDash)) {
+      errors.push({ path, message: "strokeDash must be an array" });
+    } else if (!p.strokeDash.every((v: unknown) => typeof v === 'number')) {
+      errors.push({ path, message: "strokeDash must be an array of numbers" });
+    }
+  }
+
+  return { errors, warnings };
+}
+
+function validateChildNode(node: unknown, path: string, depth: number = 0): { errors: ValidationError[]; warnings: ValidationError[] } {
+  const errors: ValidationError[] = [];
+  const warnings: ValidationError[] = [];
+
+  // Check nesting depth to prevent stack overflow
+  const MAX_DEPTH = 50;
+  if (depth > MAX_DEPTH) {
+    errors.push({ path, message: `Maximum nesting depth (${MAX_DEPTH}) exceeded` });
+    return { errors, warnings };
+  }
 
   if (typeof node !== 'object' || node === null) {
     errors.push({ path, message: 'Node must be an object' });
@@ -220,7 +468,7 @@ function validateChildNode(node: unknown, path: string): { errors: ValidationErr
     return { errors, warnings };
   }
 
-  const validTypes = ['frame', 'text', 'instance', 'rectangle'];
+  const validTypes = ['frame', 'text', 'instance', 'rectangle', 'ellipse'];
   if (!validTypes.includes(n.nodeType as string)) {
     errors.push({ path, message: `Invalid nodeType '${n.nodeType}'. Must be one of: ${validTypes.join(', ')}` });
     return { errors, warnings };
@@ -242,17 +490,88 @@ function validateChildNode(node: unknown, path: string): { errors: ValidationErr
     }
   }
 
+  // Validate style props for nodes that support them (frame, text, rectangle, ellipse)
+  if (n.nodeType === 'frame' || n.nodeType === 'text' || n.nodeType === 'rectangle' || n.nodeType === 'ellipse') {
+    const styleErrors = validateStyleProps(n, path);
+    errors.push(...styleErrors.errors);
+    warnings.push(...styleErrors.warnings);
+  }
+
   // Recursive children validation for frames
   if (n.nodeType === 'frame' && n.children) {
     if (!Array.isArray(n.children)) {
       errors.push({ path: `${path}.children`, message: 'children must be an array' });
     } else {
       (n.children as unknown[]).forEach((child, i) => {
-        const childErrors = validateChildNode(child, `${path}.children[${i}]`);
+        const childErrors = validateChildNode(child, `${path}.children[${i}]`, depth + 1);
         errors.push(...childErrors.errors);
         warnings.push(...childErrors.warnings);
       });
     }
+  }
+
+  return { errors, warnings };
+}
+
+function validateOrganization(org: unknown, path: string): { errors: ValidationError[]; warnings: ValidationError[] } {
+  const errors: ValidationError[] = [];
+  const warnings: ValidationError[] = [];
+
+  if (typeof org !== 'object' || org === null) {
+    return { errors, warnings };
+  }
+
+  const o = org as Record<string, unknown>;
+
+  // Validate groupBy
+  if (o.groupBy !== undefined) {
+    const validGroupBy = ['category', 'tags', 'none'];
+    if (typeof o.groupBy !== 'string' || !validGroupBy.includes(o.groupBy)) {
+      const validOptions = validGroupBy.join(', ');
+      errors.push({ path: `${path}.groupBy`, message: `groupBy must be one of: ${validOptions}` });
+    }
+  }
+
+  // Validate layout
+  if (o.layout !== undefined) {
+    const validLayout = ['frames', 'pages', 'grid'];
+    if (typeof o.layout !== 'string' || !validLayout.includes(o.layout)) {
+      const validOptions = validLayout.join(', ');
+      errors.push({ path: `${path}.layout`, message: `layout must be one of: ${validOptions}` });
+    }
+  }
+
+  // Validate gridColumns
+  if (o.gridColumns !== undefined) {
+    if (typeof o.gridColumns !== 'number' || o.gridColumns < 1) {
+      errors.push({ path: `${path}.gridColumns`, message: 'gridColumns must be a positive number' });
+    }
+  }
+
+  // Validate spacing
+  if (o.spacing !== undefined) {
+    if (typeof o.spacing !== 'number' || o.spacing < 0) {
+      errors.push({ path: `${path}.spacing`, message: 'spacing must be a non-negative number' });
+    }
+  }
+
+  // Validate sortBy
+  if (o.sortBy !== undefined) {
+    const validSortBy = ['alphabetical', 'schema-order'];
+    if (typeof o.sortBy !== 'string' || !validSortBy.includes(o.sortBy)) {
+      const validOptions = validSortBy.join(', ');
+      errors.push({ path: `${path}.sortBy`, message: `sortBy must be one of: ${validOptions}` });
+    }
+  }
+
+  // Validate frameLabels
+  if (o.frameLabels !== undefined && typeof o.frameLabels !== 'boolean') {
+    errors.push({ path: `${path}.frameLabels`, message: 'frameLabels must be a boolean' });
+  }
+
+  // Validate pagePrefixes
+  if (o.pagePrefixes !== undefined && typeof o.pagePrefixes !== 'boolean') {
+    errors.push({ path: `${path}.pagePrefixes`, message: 'pagePrefixes must be a boolean' });
   }
 
   return { errors, warnings };

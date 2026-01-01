@@ -1,6 +1,8 @@
-# JSON2Components Schema Reference
+# JASOTI Schema Reference
 
-**Complete specification for creating component JSON files that work with the JSON2Components Figma plugin.**
+**Complete specification for creating component JSON files that work with the JASOTI Figma plugin.**
+
+> JASOTI = JSON As Source Of Truth for Interfaces
 
 ---
 
@@ -9,6 +11,8 @@
 - [Overview](#overview)
 - [Quick Start](#quick-start)
 - [Root Schema](#root-schema)
+- [Multi-File Support](#multi-file-support)
+- [Organization Configuration](#organization-configuration)
 - [Component Sets (with Variants)](#component-sets-with-variants)
 - [Components (Standalone)](#components-standalone)
 - [Layout Properties](#layout-properties)
@@ -25,7 +29,7 @@
 
 ### What This Schema Does
 
-Defines the structure of JSON files that the JSON2Components plugin reads to generate Figma components with design token bindings.
+Defines the structure of JSON files that JASOTI reads to generate Figma components with design token bindings.
 
 ### Core Concepts
 
@@ -75,10 +79,11 @@ Defines the structure of JSON files that the JSON2Components plugin reads to gen
 
 ## Root Schema
 
-The top-level JSON object with two optional arrays:
+The top-level JSON object with optional configuration and component arrays:
 
 ```typescript
 {
+  "organization"?: Organization,
   "components"?: ComponentDefinition[],
   "componentSets"?: ComponentSetDefinition[]
 }
@@ -88,10 +93,389 @@ The top-level JSON object with two optional arrays:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `organization` | Object | No | Controls how components are positioned in Figma (see [Organization Configuration](#organization-configuration)) |
 | `components` | Array | No | Array of standalone component definitions |
 | `componentSets` | Array | No | Array of component set definitions (with variants) |
 
-**At least one array must be present.**
+**At least one component array must be present (`components` or `componentSets`).**
+
+---
+
+## Multi-File Support
+
+Select multiple JSON files at once for automatic dependency resolution.
+
+### Why Multi-File?
+
+- **Better organization**: Keep components in separate files by category or feature
+- **Dependency resolution**: Plugin automatically includes referenced components across files
+- **Team collaboration**: Easier to work on different components simultaneously without conflicts
+
+### Usage
+
+1. Click "Select JSON file(s)" in the plugin UI
+2. Hold Cmd/Ctrl and select multiple files:
+   - `Avatar.json`
+   - `FriendRating.json`
+   - `ChatInput.json`
+3. Click "Generate Components"
+
+The plugin:
+- Parses all files
+- Merges into one schema
+- Resolves dependencies across files
+- Generates in correct order (dependencies first)
+
+### Example
+
+**Avatar.json:**
+```json
+{
+  "componentSets": [{
+    "id": "avatar",
+    "name": "Avatar",
+    "variantProps": ["size"],
+    "base": {
+      "layout": { "direction": "horizontal" }
+    },
+    "variants": [
+      { "props": { "size": "small" } },
+      { "props": { "size": "large" } }
+    ]
+  }]
+}
+```
+
+**FriendRating.json:**
+```json
+{
+  "components": [{
+    "id": "friend-rating",
+    "name": "FriendRating",
+    "layout": {
+      "direction": "horizontal",
+      "gap": 8
+    },
+    "children": [
+      {
+        "nodeType": "instance",
+        "name": "UserAvatar",
+        "ref": "avatar",  // References Avatar from other file
+        "variantProps": { "size": "small" }
+      },
+      {
+        "nodeType": "text",
+        "id": "name",
+        "name": "Name",
+        "text": "John Doe"
+      }
+    ]
+  }]
+}
+```
+
+Select both files → FriendRating correctly gets Avatar instances!
+
+### Duplicate ID Detection
+
+If multiple files define components with the same `id`, the plugin will show an error:
+
+```
+❌ Duplicate component ID 'button' found in multiple files
+```
+
+**Fix:** Ensure all component IDs are unique across all files.
+
+---
+
+## Organization Configuration
+
+Control how components are positioned and organized in Figma.
+
+### Structure
+
+The `organization` field is an optional root-level configuration:
+
+```json
+{
+  "organization": {
+    "groupBy": "category",
+    "layout": "frames",
+    "gridColumns": 4,
+    "spacing": 100,
+    "sortBy": "alphabetical",
+    "frameLabels": true,
+    "pagePrefixes": false
+  },
+  "components": [...],
+  "componentSets": [...]
+}
+```
+
+### All Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `groupBy` | `'category'` \| `'tags'` \| `'none'` | `'category'` | How to group components |
+| `layout` | `'frames'` \| `'pages'` \| `'grid'` | `'frames'` | Where to place groups |
+| `gridColumns` | number | `4` | Columns per grid row |
+| `spacing` | number | `100` | Pixels between components |
+| `sortBy` | `'alphabetical'` \| `'schema-order'` | `'schema-order'` | Sort order within groups |
+| `frameLabels` | boolean | `true` | Show category labels (frames layout only) |
+| `pagePrefixes` | boolean | `false` | Add "Components/" prefix (pages layout only) |
+
+**All fields are optional.** If you omit the entire `organization` object, defaults are used.
+
+---
+
+### Grouping Options
+
+#### By Category (default)
+
+Groups components by their `category` field:
+
+```json
+{
+  "organization": { "groupBy": "category" },
+  "components": [
+    { "id": "btn", "name": "Button", "category": "Actions", ... },
+    { "id": "card", "name": "Card", "category": "Layout", ... }
+  ]
+}
+```
+
+**Result:** Separate groups for "Actions", "Layout", etc.
+
+Components without a `category` field are placed in an "Uncategorized" group.
+
+#### By Tags
+
+Groups components by their **first tag**:
+
+```json
+{
+  "organization": { "groupBy": "tags" },
+  "components": [
+    { "id": "btn", "name": "Button", "tags": ["interactive", "core"], ... }
+  ]
+}
+```
+
+**Result:** Components grouped by "interactive", "core", etc.
+
+Components without `tags` are placed in an "Untagged" group.
+
+#### No Grouping
+
+All components in a single flat layout:
+
+```json
+{
+  "organization": { "groupBy": "none", "layout": "grid" }
+}
+```
+
+**Use case:** Small libraries (5-15 components) or when you want full manual control.
+
+---
+
+### Layout Modes
+
+#### Frames (default)
+
+Creates labeled section frames on the current page:
+
+```json
+{
+  "organization": { "layout": "frames" }
+}
+```
+
+**Result:**
+```
+Current Page
+├── [Chat]
+│   ├── SendButton
+│   ├── QuickSelect
+│   └── Avatar
+├── [Forms]
+│   ├── TextField
+│   └── Checkbox
+└── [Navigation]
+    └── NavItem
+```
+
+- Each group gets a frame with a label (if `frameLabels: true`)
+- Frames are positioned horizontally with `spacing` pixels between them
+- Clean, organized view on a single page
+
+**Best for:** Medium libraries (20-50 components)
+
+#### Pages
+
+Creates separate pages for each group:
+
+```json
+{
+  "organization": {
+    "layout": "pages",
+    "pagePrefixes": true
+  }
+}
+```
+
+**Result:**
+```
+Figma Pages:
+├── Components/Chat
+├── Components/Forms
+└── Components/Navigation
+```
+
+- Each group gets its own page
+- Components laid out in a grid on each page
+- Optional "Components/" prefix with `pagePrefixes: true`
+
+**Best for:** Large libraries (50+ components)
+
+#### Grid
+
+Flat grid layout with no grouping:
+
+```json
+{
+  "organization": {
+    "layout": "grid",
+    "gridColumns": 6,
+    "spacing": 80
+  }
+}
+```
+
+**Result:** Simple grid on current page, `gridColumns` components per row.
+
+**Best for:** Very small libraries or single-group imports
+
+---
+
+### Sorting Options
+
+#### Schema Order (default)
+
+Components appear in the order they're defined in JSON:
+
+```json
+{
+  "organization": { "sortBy": "schema-order" },
+  "components": [
+    { "id": "button", "name": "Button" },
+    { "id": "input", "name": "Input" },
+    { "id": "checkbox", "name": "Checkbox" }
+  ]
+}
+```
+
+**Result:** Button → Input → Checkbox (exactly as in JSON)
+
+**Use case:** When you want full control over component order
+
+#### Alphabetical
+
+Components sorted A-Z by name within each group:
+
+```json
+{
+  "organization": { "sortBy": "alphabetical" }
+}
+```
+
+**Result:** Button → Checkbox → Input (alphabetical)
+
+**Use case:** Large libraries where alphabetical sorting helps designers find components
+
+---
+
+### Complete Examples
+
+#### Small Library (10-20 components)
+
+Use defaults - simple and effective:
+
+```json
+{
+  "components": [...]
+}
+```
+
+**Result:** Components grouped by category, in labeled frames on current page.
+
+---
+
+#### Large Library (50+ components)
+
+Use pages for better organization:
+
+```json
+{
+  "organization": {
+    "layout": "pages",
+    "sortBy": "alphabetical",
+    "pagePrefixes": true
+  },
+  "components": [
+    { "id": "btn", "name": "Button", "category": "Actions", ... },
+    { "id": "card", "name": "Card", "category": "Layout", ... },
+    ...
+  ]
+}
+```
+
+**Result:**
+```
+Pages:
+├── Components/Actions (Button sorted alphabetically)
+└── Components/Layout (Card sorted alphabetically)
+```
+
+---
+
+#### Dense Layout
+
+Fit more components on screen:
+
+```json
+{
+  "organization": {
+    "gridColumns": 8,
+    "spacing": 50,
+    "frameLabels": false
+  },
+  "components": [...]
+}
+```
+
+**Result:** 8 columns, 50px spacing, no frame labels
+
+---
+
+#### Tag-Based Organization
+
+Group by feature instead of category:
+
+```json
+{
+  "organization": {
+    "groupBy": "tags",
+    "layout": "frames"
+  },
+  "components": [
+    { "id": "btn", "name": "Button", "tags": ["core", "interactive"], ... },
+    { "id": "input", "name": "Input", "tags": ["core", "form"], ... }
+  ]
+}
+```
+
+**Result:** Groups: "core", "interactive", "form" (based on first tag)
 
 ---
 
@@ -231,12 +615,17 @@ Controls Figma auto-layout behavior.
   "direction": "horizontal",
   "padding": 16,
   "paddingTop": 8,
+  "paddingTopToken": "spacing.sm",
   "paddingRight": 16,
+  "paddingRightToken": "spacing.md",
   "paddingBottom": 8,
+  "paddingBottomToken": "spacing.sm",
   "paddingLeft": 16,
+  "paddingLeftToken": "spacing.md",
   "paddingToken": "spacing.md",
   "gap": 8,
   "gapToken": "spacing.sm",
+  "wrap": true,
   "alignItems": "center",
   "justifyContent": "space-between",
   "width": 320,
@@ -252,11 +641,16 @@ Controls Figma auto-layout behavior.
 | `padding` | number | Uniform padding | All padding sides |
 | `paddingToken` | string | Uniform padding token | All padding sides (bound to variable) |
 | `paddingTop` | number | Top padding | `paddingTop` |
+| `paddingTopToken` | string | Top padding token | `paddingTop` (bound to variable) |
 | `paddingRight` | number | Right padding | `paddingRight` |
+| `paddingRightToken` | string | Right padding token | `paddingRight` (bound to variable) |
 | `paddingBottom` | number | Bottom padding | `paddingBottom` |
+| `paddingBottomToken` | string | Bottom padding token | `paddingBottom` (bound to variable) |
 | `paddingLeft` | number | Left padding | `paddingLeft` |
+| `paddingLeftToken` | string | Left padding token | `paddingLeft` (bound to variable) |
 | `gap` | number | Space between items | `itemSpacing` |
 | `gapToken` | string | Gap token | `itemSpacing` (bound to variable) |
+| `wrap` | boolean | Enable flex-wrap | `layoutWrap` (`WRAP` or `NO_WRAP`) |
 | `alignItems` | enum | Cross-axis alignment | `counterAxisAlignItems` |
 | `justifyContent` | enum | Main-axis alignment | `primaryAxisAlignItems` |
 | `width` | number \| `"fill"` \| `"hug"` | Width mode | `layoutSizingHorizontal` |
@@ -283,6 +677,38 @@ Controls Figma auto-layout behavior.
 - `"fill"` → `FILL` (fill parent container)
 - `"hug"` → `HUG` (fit content)
 
+### Wrap Explained
+
+**Use case:** Multi-line layouts like tag lists, pill containers, or chip groups.
+
+**Example - Tag list with wrapping:**
+```json
+{
+  "direction": "horizontal",
+  "wrap": true,
+  "gap": 8,
+  "alignItems": "start"
+}
+```
+
+When `wrap: true`, items overflow to the next row/column instead of clipping or overflowing the container.
+
+### Padding Tokens Explained
+
+**Per-side padding tokens** enable asymmetric padding with design system values.
+
+**Example - Card with different vertical/horizontal padding:**
+```json
+{
+  "paddingTopToken": "spacing.lg",
+  "paddingRightToken": "spacing.md",
+  "paddingBottomToken": "spacing.lg",
+  "paddingLeftToken": "spacing.md"
+}
+```
+
+**Validation:** Cannot specify both raw value and token (e.g., both `paddingTop` and `paddingTopToken`).
+
 ---
 
 ## Style Properties
@@ -296,8 +722,13 @@ Visual styling with design token bindings.
   "fillToken": "color.surface",
   "strokeToken": "color.border",
   "strokeWidth": 1,
+  "strokeDash": [4, 4],
   "radiusToken": "radius.md",
-  "shadowToken": "shadow.sm"
+  "shadowToken": "shadow.sm",
+  "opacity": 0.9,
+  "opacityToken": "opacity.high",
+  "fillOpacity": 0.5,
+  "fillOpacityToken": "opacity.medium"
 }
 ```
 
@@ -308,18 +739,88 @@ Visual styling with design token bindings.
 | `fillToken` | string | Background color token | Color variable bound to fills |
 | `strokeToken` | string | Border color token | Color variable bound to strokes |
 | `strokeWidth` | number | Border width in pixels | `strokeWeight` |
+| `strokeDash` | number[] | Dash pattern for border | `dashPattern` (e.g., `[4, 4]` for dashed) |
 | `radiusToken` | string | Corner radius token | Number variable bound to all 4 corners |
-| `shadowToken` | string | Shadow/effect token | ⚠️ Not yet implemented (warns user) |
+| `shadowToken` | string | Shadow/effect token | Effect variable bound to effects |
+| `opacity` | number (0-1) | Layer-level opacity | `node.opacity` |
+| `opacityToken` | string | Layer-level opacity token | Number variable bound to opacity |
+| `fillOpacity` | number (0-1) | Paint-level opacity | `paint.opacity` on fill |
+| `fillOpacityToken` | string | Paint-level opacity token | Number variable bound to fill opacity |
 
 **Token Resolution:** The plugin looks for Figma variables/styles with matching names.
 
 **Example:** `"fillToken": "color.primary"` → Plugin finds variable named `color.primary` and binds it.
 
+### Stroke Dash Explained
+
+**Use case:** Dashed borders for secondary elements, dividers, or helper components.
+
+**Common patterns:**
+- `[4, 4]` - Standard dashed line (4px dash, 4px gap)
+- `[2, 2]` - Fine dashed line
+- `[8, 4]` - Long dashes
+- `[1, 3]` - Dotted line
+
+**Example - Dashed border pill:**
+```json
+{
+  "strokeToken": "color.border.subtle",
+  "strokeWidth": 1,
+  "strokeDash": [4, 4],
+  "radiusToken": "radius.full"
+}
+```
+
+### Opacity Explained
+
+**Layer-level opacity** (`opacity` / `opacityToken`):
+- Affects the entire node including all children, fills, strokes, and effects
+- Range: 0.0 (fully transparent) to 1.0 (fully opaque)
+- Use case: Disabled states, ghost elements, overlays
+
+**Paint-level opacity** (`fillOpacity` / `fillOpacityToken`):
+- Only affects the fill color opacity (background)
+- Does not affect strokes, shadows, or children
+- Range: 0.0 (fully transparent) to 1.0 (fully opaque)
+- Use case: Semi-transparent backgrounds while keeping text/borders opaque
+
+**Example - Disabled button variant:**
+```json
+{
+  "props": { "state": "disabled" },
+  "opacity": 0.5  // Entire button becomes semi-transparent
+}
+```
+
+**Example - Glassmorphism effect:**
+```json
+{
+  "fillToken": "color.surface",
+  "fillOpacity": 0.7,  // Semi-transparent background
+  "shadowToken": "shadow.lg"  // Shadow stays fully visible
+}
+```
+
+**Validation Rules:**
+- Cannot specify both raw value and token (e.g., both `opacity` and `opacityToken`)
+- Values must be between 0 and 1
+- Both layer-level and paint-level opacity can be used together
+
 ---
 
 ## Child Nodes
 
-Components can contain four types of child nodes.
+Components can contain five types of child nodes.
+
+### Node ID Stability
+
+Each child node's `id` field is stored in Figma's pluginData (`jasoti.nodeId`), ensuring reliable identification even if node names change. This enables:
+
+- **Reliable text overrides**: Text overrides match by schema ID (not name), preventing errors when multiple nodes share the same name
+- **Regeneration safety**: Re-running the plugin on the same schema preserves node identities
+- **Refactoring support**: Renaming nodes in Figma doesn't break schema references
+
+When using text overrides (see [Instance Node](#instance-node)), the plugin preferentially matches by this stored ID, falling back to name matching for backward compatibility with older components.
 
 ### Node Types
 
@@ -328,6 +829,7 @@ Components can contain four types of child nodes.
 | `frame` | Nested containers | Icon wrapper, content section |
 | `text` | Text labels | Button label, card title |
 | `rectangle` | Simple shapes | Divider, background |
+| `ellipse` | Circles and ovals | Status dot, avatar placeholder |
 | `instance` | Component instances | Button inside Card |
 
 ---
@@ -414,7 +916,59 @@ Simple rectangle shape (for dividers, backgrounds).
 
 **Optional:**
 - `layout`: Only `width` and `height` supported
-- `fillToken`, `strokeToken`, `strokeWidth`, `radiusToken`
+- `fillToken`, `strokeToken`, `strokeWidth`, `strokeDash`, `radiusToken`
+- `opacity`, `opacityToken`, `fillOpacity`, `fillOpacityToken`
+
+---
+
+### Ellipse Node
+
+Native ellipse/circle shape (better than rectangle + full radius workaround).
+
+```json
+{
+  "nodeType": "ellipse",
+  "id": "status-dot",
+  "name": "StatusDot",
+  "layout": {
+    "width": 8,
+    "height": 8
+  },
+  "fillToken": "color.success"
+}
+```
+
+**Required:**
+- `nodeType`: `"ellipse"`
+- `id`: Unique within parent
+- `name`: Figma layer name
+
+**Optional:**
+- `layout`: Only `width` and `height` supported
+- `fillToken`, `strokeToken`, `strokeWidth`, `strokeDash`
+- `opacity`, `opacityToken`, `fillOpacity`, `fillOpacityToken`
+
+**Use Cases:**
+- **Perfect circles**: Set `width` and `height` to the same value
+- **Ovals**: Use different `width` and `height` values
+- **Status indicators**: Small colored dots (e.g., online/offline status)
+- **Avatar placeholders**: Circular image placeholders
+
+**Example - Online status indicator:**
+```json
+{
+  "nodeType": "ellipse",
+  "id": "online-status",
+  "name": "OnlineStatus",
+  "layout": {
+    "width": 12,
+    "height": 12
+  },
+  "fillToken": "color.status.online",
+  "strokeToken": "color.surface",
+  "strokeWidth": 2
+}
+```
 
 ---
 
@@ -463,7 +1017,15 @@ If `ref` points to a componentSet:
   "label": { "text": "Submit" }
 }
 ```
-Finds child node with `id: "label"` and sets its text to `"Submit"`.
+
+Finds child text node with `id: "label"` and sets its text to `"Submit"`.
+
+**How matching works:**
+1. **Primary match**: Searches for nodes with `pluginData('jasoti.nodeId') === 'label'` (most reliable)
+2. **Fallback match**: If no pluginData match found, searches for nodes with `name === 'label'` (backward compatibility)
+3. **Warning**: If fallback matching is used, shows a warning suggesting regeneration of the referenced component for reliable matching
+
+**Best practice:** Regenerate components using the latest plugin version to ensure all child nodes have pluginData for reliable text overrides.
 
 ---
 
@@ -473,7 +1035,7 @@ Finds child node with `id: "label"` and sets its text to `"Submit"`.
 
 1. **You define tokens** in your design system (JSON, YAML, etc.)
 2. **Tokens Studio syncs to Figma** creating variables and text styles
-3. **JSON2Components references tokens** by name using `*Token` fields
+3. **JASOTI references tokens** by name using `*Token` fields
 4. **Plugin binds variables** to Figma component properties
 
 ### Token Naming Convention
@@ -508,29 +1070,70 @@ All token fields end with `Token`:
 
 ### Token Name Matching
 
-**Exact match required.** Case-sensitive.
+**Smart resolution with multiple fallback strategies.** The plugin tries several naming patterns to find your tokens, adapting to different Tokens Studio configurations.
 
-❌ Wrong:
+#### Resolution Strategies
+
+When you reference a token like `"fillToken": "semantic.color.primary.default"`, the plugin tries in order:
+
+1. **Exact match**: `semantic.color.primary.default`
+2. **Dot-to-slash**: `semantic/color/primary/default` (common Tokens Studio format)
+3. **Strip prefixes**: `color.primary.default`, `color/primary/default` (handles collection names)
+4. **Partial match**: Any variable ending in `/default` or `.default`
+5. **Similarity**: Suggests closest matching names if nothing found
+
+#### Supported Prefixes
+
+These prefixes are automatically tried when stripping:
+- `semantic.` / `semantic/`
+- `primitives.` / `primitives/`
+- `core.` / `core/`
+- `tokens.` / `tokens/`
+
+For text styles:
+- `typography.` / `typography/`
+- `text.` / `text/`
+- `font.` / `font/`
+
+#### Examples
+
+✅ All of these work:
 ```json
-"fillToken": "Color.Primary"  // Capital C
+{
+  "fillToken": "semantic.color.primary",
+  // Matches: semantic/color/primary (Tokens Studio slash format)
+
+  "fillToken": "semantic.color.primary.default",
+  // Matches: color/primary/default (in "semantic" collection)
+
+  "textStyleToken": "typography.label-large",
+  // Matches: Typography/label-large (capitalized Figma style)
+
+  "paddingToken": "core.spacing.md",
+  // Matches: spacing/md (in "core" collection)
+}
 ```
 
-✅ Correct:
-```json
-"fillToken": "color.primary"  // Matches Figma variable name exactly
-```
+#### Case Sensitivity
+
+Variable names are case-sensitive, but text styles try capitalization variants automatically.
 
 ### Missing Tokens
 
-If a token isn't found, the plugin:
-1. Shows a warning in the UI
+If a token isn't found after all resolution strategies, the plugin:
+1. Shows a detailed warning in the UI with helpful suggestions
 2. Generates the component anyway (without that style applied)
 3. Continues processing other components
 
-Example warning:
+Example warning with suggestions:
 ```
-⚠️ Variable 'color.accent' not found
+⚠ Variable 'semantic.color.primary' not found
+  Tried: semantic.color.primary, semantic/color/primary, color.primary, color/primary, */primary
+  💡 Did you mean: 'semantic/color/secondary'?
+  Available: semantic/color/secondary, semantic/color/tertiary, ...
 ```
+
+This helps you quickly identify and fix token naming mismatches.
 
 ---
 
@@ -815,6 +1418,100 @@ Or:
 }
 ```
 
+**Same rule applies to:**
+- `opacity` / `opacityToken`
+- `fillOpacity` / `fillOpacityToken`
+- `gap` / `gapToken`
+- `paddingTop` / `paddingTopToken`
+- `paddingRight` / `paddingRightToken`
+- `paddingBottom` / `paddingBottomToken`
+- `paddingLeft` / `paddingLeftToken`
+
+---
+
+### Type Validation
+
+**wrap must be boolean:**
+
+❌ **Invalid:**
+```json
+{
+  "layout": {
+    "wrap": "true"  // String, not boolean!
+  }
+}
+```
+
+**Error:** `"wrap must be a boolean"`
+
+✅ **Valid:**
+```json
+{
+  "layout": {
+    "wrap": true
+  }
+}
+```
+
+**strokeDash must be array of numbers:**
+
+❌ **Invalid:**
+```json
+{
+  "strokeDash": "4, 4"  // String, not array!
+}
+```
+
+**Error:** `"strokeDash must be an array"`
+
+❌ **Invalid:**
+```json
+{
+  "strokeDash": [4, "4"]  // Mixed types!
+}
+```
+
+**Error:** `"strokeDash must be an array of numbers"`
+
+✅ **Valid:**
+```json
+{
+  "strokeDash": [4, 4]
+}
+```
+
+---
+
+### Opacity Range Validation
+
+Opacity values must be between 0 (fully transparent) and 1 (fully opaque).
+
+❌ **Invalid:**
+```json
+{
+  "opacity": 1.5  // Out of range!
+}
+```
+
+**Error:** `"opacity must be between 0 and 1"`
+
+❌ **Invalid:**
+```json
+{
+  "fillOpacity": -0.2  // Out of range!
+}
+```
+
+**Error:** `"fillOpacity must be between 0 and 1"`
+
+✅ **Valid:**
+```json
+{
+  "opacity": 0.5,
+  "fillOpacity": 0.8
+}
+```
+
 ---
 
 ### Required Fields
@@ -872,6 +1569,44 @@ Components cannot depend on themselves (directly or indirectly).
 ```
 
 **Error:** `"Circular dependency detected: a → b → a"`
+
+---
+
+### Nesting Depth Limit
+
+Child nodes cannot be nested deeper than 50 levels to prevent stack overflow.
+
+❌ **Invalid:**
+```json
+{
+  "children": [
+    {
+      "nodeType": "frame",
+      "id": "level1",
+      "name": "Level1",
+      "children": [
+        {
+          "nodeType": "frame",
+          "id": "level2",
+          "name": "Level2",
+          "children": [
+            // ... 48 more levels ...
+            {
+              "nodeType": "frame",
+              "id": "level51",
+              "name": "Level51"  // Too deep!
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Error:** `"Maximum nesting depth (50) exceeded"`
+
+**Note:** This limit is extremely generous and should never be hit in normal use cases. If you encounter this error, your schema likely has a structural issue.
 
 ---
 
@@ -1134,8 +1869,18 @@ design-system/
 
 ---
 
+### "Text override matched by name (not schema ID)"
+
+**Cause:** Referenced component was generated with an older plugin version that didn't store node IDs in pluginData.
+
+**Impact:** Text overrides work but are less reliable if multiple nodes have the same name.
+
+**Fix:** Regenerate the referenced component using the latest plugin version. After regeneration, text overrides will use reliable schema ID matching.
+
+---
+
 ## Need Help?
 
 - **Examples:** See `examples/buttons.json` in the repo
 - **Design Spec:** See `docs/plans/2025-11-24-json2components-design.md`
-- **Issues:** https://github.com/roic/figma-json2component/issues
+- **Issues:** https://github.com/roic/jasoti/issues

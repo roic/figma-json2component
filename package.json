@@ -1,7 +1,7 @@
 {
-  "name": "figma-json2component",
+  "name": "jasoti",
   "version": "0.1.0",
-  "description": "Generate Figma components from JSON schema",
+  "description": "JASOTI - JSON As Source Of Truth for Interfaces. A Figma plugin that generates components from JSON schema.",
   "scripts": {
     "build": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",

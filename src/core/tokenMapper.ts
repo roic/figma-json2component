@@ -44,11 +44,24 @@ function extractFromStyleProps(props: StyleProps, tokens: Set<string>): void {
   if (props.strokeToken) tokens.add(props.strokeToken);
   if (props.radiusToken) tokens.add(props.radiusToken);
   if (props.shadowToken) tokens.add(props.shadowToken);
+  if (props.opacityToken) tokens.add(props.opacityToken);
+  if (props.fillOpacityToken) tokens.add(props.fillOpacityToken);
 }
 
-function extractLayoutTokens(layout: { paddingToken?: string; gapToken?: string } | undefined, tokens: Set<string>): void {
+function extractLayoutTokens(layout: {
+  paddingToken?: string;
+  paddingTopToken?: string;
+  paddingRightToken?: string;
+  paddingBottomToken?: string;
+  paddingLeftToken?: string;
+  gapToken?: string;
+} | undefined, tokens: Set<string>): void {
   if (!layout) return;
   if (layout.paddingToken) tokens.add(layout.paddingToken);
+  if (layout.paddingTopToken) tokens.add(layout.paddingTopToken);
+  if (layout.paddingRightToken) tokens.add(layout.paddingRightToken);
+  if (layout.paddingBottomToken) tokens.add(layout.paddingBottomToken);
+  if (layout.paddingLeftToken) tokens.add(layout.paddingLeftToken);
   if (layout.gapToken) tokens.add(layout.gapToken);
 }
 
@@ -56,6 +69,8 @@ function extractFromChildNode(node: ChildNode, tokens: Set<string>, textStyles: 
   if (node.nodeType === 'text') {
     if (node.fillToken) tokens.add(node.fillToken);
     if (node.textStyleToken) textStyles.add(node.textStyleToken);
+    if (node.opacityToken) tokens.add(node.opacityToken);
+    if (node.fillOpacityToken) tokens.add(node.fillOpacityToken);
   } else if (node.nodeType === 'frame') {
     extractFromStyleProps(node, tokens);
     extractLayoutTokens(node.layout, tokens);
@@ -64,5 +79,12 @@ function extractFromChildNode(node: ChildNode, tokens: Set<string>, textStyles: 
     if (node.fillToken) tokens.add(node.fillToken);
     if (node.strokeToken) tokens.add(node.strokeToken);
     if (node.radiusToken) tokens.add(node.radiusToken);
+    if (node.opacityToken) tokens.add(node.opacityToken);
+    if (node.fillOpacityToken) tokens.add(node.fillOpacityToken);
+  } else if (node.nodeType === 'ellipse') {
+    if (node.fillToken) tokens.add(node.fillToken);
+    if (node.strokeToken) tokens.add(node.strokeToken);
+    if (node.opacityToken) tokens.add(node.opacityToken);
+    if (node.fillOpacityToken) tokens.add(node.fillOpacityToken);
   }
 }

@@ -119,12 +119,13 @@
   </style>
 </head>
 <body>
-  <h1>JSON2Components</h1>
+  <h1>JASOTI</h1>
 
   <div class="section">
     <div class="file-picker" id="filePicker">
-      <div>Click to select JSON file</div>
-      <input type="file" id="fileInput" accept=".json" style="display: none;">
+      <div>Click to select JSON file(s)</div>
+      <div style="font-size: 10px; color: #888; margin-top: 4px;">Tip: Select multiple files for auto-dependency resolution</div>
+      <input type="file" id="fileInput" accept=".json" multiple style="display: none;">
     </div>
     <div id="fileStatus"></div>
   </div>

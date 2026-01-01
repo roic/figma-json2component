@@ -29,8 +29,10 @@
       "variants": [
         { "props": { "type": "primary", "state": "default" }, "fillToken": "color.primary" },
         { "props": { "type": "primary", "state": "hover" }, "fillToken": "color.primary.hover" },
+        { "props": { "type": "primary", "state": "disabled" }, "fillToken": "color.primary", "opacity": 0.5 },
         { "props": { "type": "secondary", "state": "default" }, "fillToken": "color.secondary" },
-        { "props": { "type": "secondary", "state": "hover" }, "fillToken": "color.secondary.hover" }
+        { "props": { "type": "secondary", "state": "hover" }, "fillToken": "color.secondary.hover" },
+        { "props": { "type": "secondary", "state": "disabled" }, "fillToken": "color.secondary", "opacity": 0.5 }
       ]
     }
   ],
@@ -71,6 +73,121 @@
           "ref": "button",
           "variantProps": { "type": "primary", "state": "default" },
           "overrides": { "label": { "text": "Action" } }
+        }
+      ]
+    },
+    {
+      "id": "card-glass",
+      "name": "GlassmorphicCard",
+      "description": "Card with glassmorphism effect using semi-transparent background",
+      "layout": {
+        "direction": "vertical",
+        "padding": 20,
+        "gap": 12,
+        "width": 300,
+        "height": "hug"
+      },
+      "fillToken": "color.surface",
+      "fillOpacity": 0.7,
+      "radiusToken": "radius.lg",
+      "shadowToken": "shadow.lg",
+      "strokeToken": "color.border.subtle",
+      "strokeWidth": 1,
+      "children": [
+        {
+          "nodeType": "text",
+          "id": "title",
+          "name": "Title",
+          "text": "Glassmorphic Card",
+          "textStyleToken": "typography.heading"
+        },
+        {
+          "nodeType": "text",
+          "id": "body",
+          "name": "Body",
+          "text": "Semi-transparent background with opaque text and shadow.",
+          "textStyleToken": "typography.body",
+          "fillToken": "color.text.primary"
+        }
+      ]
+    },
+    {
+      "id": "other-pill",
+      "name": "OtherPill",
+      "description": "Pill with dashed border (demonstrating strokeDash)",
+      "layout": {
+        "direction": "horizontal",
+        "paddingTopToken": "spacing.xs",
+        "paddingRightToken": "spacing.sm",
+        "paddingBottomToken": "spacing.xs",
+        "paddingLeftToken": "spacing.sm",
+        "gap": 4,
+        "alignItems": "center",
+        "height": "hug",
+        "width": "hug"
+      },
+      "radiusToken": "radius.full",
+      "strokeToken": "color.border.subtle",
+      "strokeWidth": 1,
+      "strokeDash": [4, 4],
+      "children": [
+        {
+          "nodeType": "text",
+          "id": "label",
+          "name": "Label",
+          "text": "Other",
+          "textStyleToken": "typography.caption",
+          "fillToken": "color.text.secondary"
+        }
+      ]
+    },
+    {
+      "id": "quick-select",
+      "name": "QuickSelect",
+      "description": "Multi-line pill container (demonstrating wrap)",
+      "layout": {
+        "direction": "horizontal",
+        "wrap": true,
+        "padding": 16,
+        "gap": 8,
+        "alignItems": "start",
+        "width": 320,
+        "height": "hug"
+      },
+      "fillToken": "color.surface",
+      "radiusToken": "radius.md",
+      "strokeToken": "color.border",
+      "strokeWidth": 1,
+      "children": [
+        {
+          "nodeType": "instance",
+          "name": "Pill1",
+          "ref": "other-pill",
+          "overrides": { "label": { "text": "Design" } }
+        },
+        {
+          "nodeType": "instance",
+          "name": "Pill2",
+          "ref": "other-pill",
+          "overrides": { "label": { "text": "Engineering" } }
+        },
+        {
+          "nodeType": "instance",
+          "name": "Pill3",
+          "ref": "other-pill",
+          "overrides": { "label": { "text": "Product" } }
+        },
+        {
+          "nodeType": "instance",
+          "name": "Pill4",
+          "ref": "other-pill",
+          "overrides": { "label": { "text": "Marketing" } }
+        },
+        {
+          "nodeType": "instance",
+          "name": "Pill5",
+          "ref": "other-pill",
+          "overrides": { "label": { "text": "Sales" } }
         }
       ]
     }

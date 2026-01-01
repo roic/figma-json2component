@@ -1,6 +1,6 @@
 {
-  "name": "JSON2Components",
-  "id": "json2components-dev",
+  "name": "JASOTI",
+  "id": "jasoti-dev",
   "api": "1.0.0",
   "main": "dist/main.js",
   "ui": "dist/ui.html",

@@ -281,3 +281,292 @@ describe('parseSchema edge cases', () => {
     expect(result.errors.some(e => e.message.includes('gap'))).toBe(true);
   });
 });
+
+describe('parseSchema opacity validation', () => {
+  it('returns error for opacity/opacityToken conflict', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        opacity: 0.5,
+        opacityToken: 'opacity.half'
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('opacity'))).toBe(true);
+  });
+
+  it('returns error for fillOpacity/fillOpacityToken conflict', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        fillOpacity: 0.5,
+        fillOpacityToken: 'opacity.half'
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('fillOpacity'))).toBe(true);
+  });
+
+  it('returns error for opacity out of range (below 0)', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        opacity: -0.5
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('opacity must be between 0 and 1'))).toBe(true);
+  });
+
+  it('returns error for opacity out of range (above 1)', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        opacity: 1.5
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('opacity must be between 0 and 1'))).toBe(true);
+  });
+
+  it('returns error for fillOpacity out of range', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        fillOpacity: 2
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('fillOpacity must be between 0 and 1'))).toBe(true);
+  });
+
+  it('accepts valid opacity values', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        opacity: 0.5,
+        fillOpacity: 0.8
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('validates opacity in child nodes', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        children: [{
+          nodeType: 'text',
+          id: 'label',
+          name: 'Label',
+          opacity: 1.5  // invalid
+        }]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('opacity must be between 0 and 1'))).toBe(true);
+  });
+
+  it('validates opacity in componentSet variants', () => {
+    const json = JSON.stringify({
+      componentSets: [{
+        id: 'button',
+        name: 'Button',
+        variantProps: ['state'],
+        base: {
+          layout: {}
+        },
+        variants: [
+          { props: { state: 'disabled' }, opacity: 0.5, opacityToken: 'opacity.half' }
+        ]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('opacity'))).toBe(true);
+  });
+});
+
+describe('parseSchema layout wrap and padding tokens', () => {
+  it('returns error for wrap not boolean', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {
+          wrap: "true"  // Should be boolean, not string
+        }
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('wrap must be a boolean'))).toBe(true);
+  });
+
+  it('accepts wrap as boolean', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {
+          wrap: true
+        }
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('returns error for paddingTop/paddingTopToken conflict', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {
+          paddingTop: 8,
+          paddingTopToken: 'spacing.sm'
+        }
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('paddingTop'))).toBe(true);
+  });
+
+  it('returns error for paddingLeft/paddingLeftToken conflict', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {
+          paddingLeft: 12,
+          paddingLeftToken: 'spacing.md'
+        }
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('paddingLeft'))).toBe(true);
+  });
+
+  it('accepts all padding tokens', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {
+          paddingTopToken: 'spacing.sm',
+          paddingRightToken: 'spacing.md',
+          paddingBottomToken: 'spacing.sm',
+          paddingLeftToken: 'spacing.md'
+        }
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+});
+
+describe('parseSchema strokeDash validation', () => {
+  it('returns error for strokeDash not array', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        strokeDash: "4, 4"  // Should be array
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('strokeDash must be an array'))).toBe(true);
+  });
+
+  it('returns error for strokeDash array with non-numbers', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        strokeDash: [4, "4"]  // Mixed types
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('strokeDash must be an array of numbers'))).toBe(true);
+  });
+
+  it('accepts valid strokeDash array', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        strokeDash: [4, 4]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('validates strokeDash in child rectangles', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        children: [{
+          nodeType: 'rectangle',
+          id: 'rect',
+          name: 'Rect',
+          strokeDash: "invalid"  // Not an array
+        }]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('strokeDash must be an array'))).toBe(true);
+  });
+});

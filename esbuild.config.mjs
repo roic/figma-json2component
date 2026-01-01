@@ -3,23 +3,23 @@ import * as fs from 'fs';
 
 const isWatch = process.argv.includes('--watch');
 
-// Build main.ts (Figma sandbox)
+// Build main.ts (Figma sandbox - runs on Node 10.4)
 const mainConfig = {
   entryPoints: ['src/main.ts'],
   bundle: true,
   outfile: 'dist/main.js',
   format: 'iife',
-  target: 'es2020',
+  target: 'es2015',  // Maximum compatibility - transpiles all modern syntax
   sourcemap: false,
 };
 
-// Build ui.ts and inline into HTML
+// Build ui.ts and inline into HTML (runs in iframe with modern browser)
 const uiConfig = {
   entryPoints: ['src/ui.ts'],
   bundle: true,
   outfile: 'dist/ui.js',
   format: 'iife',
-  target: 'es2020',
+  target: ['chrome58', 'firefox57', 'safari11', 'edge16'],  // Modern browsers
   sourcemap: false,
 };
 

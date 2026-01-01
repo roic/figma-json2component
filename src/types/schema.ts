@@ -15,11 +15,16 @@ export interface LayoutProps {
   padding?: number;
   paddingToken?: string;
   paddingTop?: number;
+  paddingTopToken?: string;
   paddingRight?: number;
+  paddingRightToken?: string;
   paddingBottom?: number;
+  paddingBottomToken?: string;
   paddingLeft?: number;
+  paddingLeftToken?: string;
   gap?: number;
   gapToken?: string;
+  wrap?: boolean;
   alignItems?: AlignItems;
   justifyContent?: JustifyContent;
   width?: SizeValue;
@@ -30,8 +35,13 @@ export interface StyleProps {
   fillToken?: string;
   strokeToken?: string;
   strokeWidth?: number;
+  strokeDash?: number[];
   radiusToken?: string;
   shadowToken?: string;
+  opacity?: number;
+  opacityToken?: string;
+  fillOpacity?: number;
+  fillOpacityToken?: string;
 }
 
 // ============ Node Types ============
@@ -57,6 +67,10 @@ export interface TextNode extends BaseNode {
   text?: string;
   textStyleToken?: string;
   fillToken?: string;
+  opacity?: number;
+  opacityToken?: string;
+  fillOpacity?: number;
+  fillOpacityToken?: string;
 }
 
 export interface InstanceNode {
@@ -75,10 +89,28 @@ export interface RectangleNode extends BaseNode {
   fillToken?: string;
   strokeToken?: string;
   strokeWidth?: number;
+  strokeDash?: number[];
   radiusToken?: string;
+  opacity?: number;
+  opacityToken?: string;
+  fillOpacity?: number;
+  fillOpacityToken?: string;
 }
 
-export type ChildNode = FrameNode | TextNode | InstanceNode | RectangleNode;
+export interface EllipseNode extends BaseNode {
+  nodeType: 'ellipse';
+  layout?: Pick<LayoutProps, 'width' | 'height'>;
+  fillToken?: string;
+  strokeToken?: string;
+  strokeWidth?: number;
+  strokeDash?: number[];
+  opacity?: number;
+  opacityToken?: string;
+  fillOpacity?: number;
+  fillOpacityToken?: string;
+}
+
+export type ChildNode = FrameNode | TextNode | InstanceNode | RectangleNode | EllipseNode;
 
 // ============ Component Types ============
 
@@ -89,6 +121,7 @@ export interface ComponentBase extends StyleProps {
 
 export interface Variant extends StyleProps {
   props: Record<string, string>;
+  layout?: Partial<LayoutProps>;  // Variants can override layout properties
 }
 
 export interface ComponentSetDefinition {
@@ -114,9 +147,25 @@ export interface ComponentDefinition extends StyleProps {
   children?: ChildNode[];
 }
 
+// ============ Organization Configuration ============
+
+export interface Organization {
+  // Phase 1: Core options
+  groupBy?: 'category' | 'tags' | 'none';  // How to group components (default: 'category')
+  layout?: 'frames' | 'pages' | 'grid';     // Where to place groups (default: 'frames')
+  gridColumns?: number;                      // Columns in grid layout (default: 4)
+  spacing?: number;                          // Spacing between components (default: 100)
+
+  // Phase 2: Advanced options
+  sortBy?: 'alphabetical' | 'schema-order';  // How to sort within groups (default: 'schema-order')
+  frameLabels?: boolean;                     // Show category labels on frames (default: true)
+  pagePrefixes?: boolean;                    // Prefix page names with "Components/" (default: false)
+}
+
 // ============ Schema Root ============
 
 export interface Schema {
+  organization?: Organization;
   components?: ComponentDefinition[];
   componentSets?: ComponentSetDefinition[];
 }
