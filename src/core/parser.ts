@@ -737,3 +737,45 @@ export function extractTokenReferences(schema: Schema): TokenReference[] {
 
   return refs;
 }
+
+// ============ Icon Reference Extraction ============
+
+export interface IconReference {
+  iconRef: string;
+  path: string;
+}
+
+/**
+ * Extract all iconRef references from a schema for pre-flight validation.
+ */
+export function extractIconRefs(schema: Schema): IconReference[] {
+  const refs: IconReference[] = [];
+
+  function walkChildren(children: ChildNode[] | undefined, path: string) {
+    if (!children) return;
+
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      const childPath = `${path}.children[${i}]`;
+
+      if (child.nodeType === 'instance' && child.iconRef) {
+        refs.push({ iconRef: child.iconRef, path: childPath });
+      }
+
+      // Recurse into any node with children (frames)
+      if (child.nodeType === 'frame' && child.children) {
+        walkChildren(child.children, childPath);
+      }
+    }
+  }
+
+  schema.components?.forEach((comp, i) => {
+    walkChildren(comp.children, `components[${i}]`);
+  });
+
+  schema.componentSets?.forEach((set, i) => {
+    walkChildren(set.base.children, `componentSets[${i}].base`);
+  });
+
+  return refs;
+}
