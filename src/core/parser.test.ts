@@ -576,7 +576,66 @@ describe('parseSchema instance componentKey validation', () => {
 
     const result = parseSchema(json);
     expect(result.valid).toBe(false);
-    expect(result.errors.some(e => e.message.includes('both'))).toBe(true);
+    expect(result.errors.some(e => e.message.includes('can only have one'))).toBe(true);
+  });
+});
+
+describe('parseSchema iconRef validation', () => {
+  it('validates instance with iconRef', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'instance',
+          name: 'SearchIcon',
+          iconRef: 'lucide:search'
+        }]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+  });
+
+  it('returns error for invalid iconRef format', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'instance',
+          name: 'Icon',
+          iconRef: 'lucide-search'  // Missing colon
+        }]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('iconRef'))).toBe(true);
+  });
+
+  it('returns error when instance has multiple reference types', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'instance',
+          name: 'Icon',
+          ref: 'button',
+          iconRef: 'lucide:search'
+        }]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('can only have one'))).toBe(true);
   });
 });
 

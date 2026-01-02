@@ -1,5 +1,6 @@
 // src/core/parser.ts
 import type { Schema, ValidationResult, ValidationError, ComponentDefinition, ComponentSetDefinition, ChildNode, LayoutProps, StyleProps, RectangleNode, Organization } from '../types/schema';
+import { parseIconRef } from '../types/iconRegistry';
 
 export interface ParseResult extends ValidationResult {
   schema?: Schema;
@@ -489,12 +490,22 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
   if (n.nodeType === 'instance') {
     const hasRef = n.ref && typeof n.ref === 'string';
     const hasComponentKey = n.componentKey && typeof n.componentKey === 'string';
+    const hasIconRef = n.iconRef && typeof n.iconRef === 'string';
 
-    if (!hasRef && !hasComponentKey) {
-      errors.push({ path, message: "Instance requires either 'ref' (local) or 'componentKey' (library)" });
+    const refCount = [hasRef, hasComponentKey, hasIconRef].filter(Boolean).length;
+
+    if (refCount === 0) {
+      errors.push({ path, message: "Instance requires 'ref', 'componentKey', or 'iconRef'" });
     }
-    if (hasRef && hasComponentKey) {
-      errors.push({ path, message: "Instance cannot have both 'ref' and 'componentKey'" });
+    if (refCount > 1) {
+      errors.push({ path, message: "Instance can only have one of 'ref', 'componentKey', or 'iconRef'" });
+    }
+
+    if (hasIconRef) {
+      const parsed = parseIconRef(n.iconRef as string);
+      if (!parsed) {
+        errors.push({ path, message: "Invalid iconRef format. Expected 'library:iconName' (e.g., 'lucide:search')" });
+      }
     }
   }
 
