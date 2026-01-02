@@ -1,6 +1,7 @@
 // src/types/iconRegistry.ts
 
 export interface IconRegistry {
+  type: 'icon-registry';     // Sentinel for unambiguous detection
   library: string;           // e.g., "lucide", "material"
   figmaLibraryName: string;  // e.g., "Lucide Icons" (for error messages)
   fileKey?: string;          // Figma file key (for version tracking)
@@ -37,11 +38,14 @@ export function parseIconRef(ref: string): IconRef | null {
 
 /**
  * Check if a parsed JSON object is an IconRegistry (vs a component schema).
+ * Uses sentinel `type: 'icon-registry'` for unambiguous detection.
  */
 export function isIconRegistry(obj: unknown): obj is IconRegistry {
   return (
     typeof obj === 'object' &&
     obj !== null &&
+    'type' in obj &&
+    (obj as IconRegistry).type === 'icon-registry' &&
     'library' in obj &&
     'icons' in obj &&
     typeof (obj as IconRegistry).library === 'string' &&

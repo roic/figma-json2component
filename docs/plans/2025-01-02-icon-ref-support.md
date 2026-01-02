@@ -53,6 +53,7 @@ When published as a product, registries can be hosted on CDN and fetched by vers
 // src/types/iconRegistry.ts
 
 export interface IconRegistry {
+  type: 'icon-registry';     // Sentinel for unambiguous detection
   library: string;           // e.g., "lucide", "material"
   figmaLibraryName: string;  // e.g., "Lucide Icons" (for error messages)
   fileKey?: string;          // Figma file key (for version tracking)
@@ -89,11 +90,14 @@ export function parseIconRef(ref: string): IconRef | null {
 
 /**
  * Check if a parsed JSON object is an IconRegistry (vs a component schema).
+ * Uses sentinel `type: 'icon-registry'` for unambiguous detection.
  */
 export function isIconRegistry(obj: unknown): obj is IconRegistry {
   return (
     typeof obj === 'object' &&
     obj !== null &&
+    'type' in obj &&
+    (obj as IconRegistry).type === 'icon-registry' &&
     'library' in obj &&
     'icons' in obj &&
     typeof (obj as IconRegistry).library === 'string' &&
@@ -284,6 +288,7 @@ import { IconRegistry } from '../types/iconRegistry';
 
 describe('IconRegistryResolver', () => {
   const lucideRegistry: IconRegistry = {
+    type: 'icon-registry',
     library: 'lucide',
     figmaLibraryName: 'Lucide Icons',
     icons: {
@@ -294,6 +299,7 @@ describe('IconRegistryResolver', () => {
   };
 
   const materialRegistry: IconRegistry = {
+    type: 'icon-registry',
     library: 'material',
     figmaLibraryName: 'Material Design Icons',
     icons: {
@@ -853,17 +859,22 @@ git commit -m "feat(parser): add extractIconRefs for pre-flight validation"
 - Modify: `src/ui.ts`
 - Modify: `src/main.ts`
 
-**Step 1: Add extraction button to UI**
+**Note:** Simplified extraction - extracts all instances from the current file. User provides library name via text input. This is explicitly "file-local registry generation" - user must place icons in the file first.
+
+**Step 1: Add extraction section to UI**
 
 In `src/ui.html`, add a section:
 
 ```html
 <div class="section">
   <h3>Icon Registry</h3>
-  <button id="extract-registry-btn" class="secondary-btn">
-    Extract Registry from Library
-  </button>
+  <p class="hint">Place icons from a library into your file, then extract their keys.</p>
+  <div class="input-group">
+    <input type="text" id="library-name-input" placeholder="Library name (e.g., lucide)" />
+    <button id="extract-registry-btn" class="secondary-btn">Extract</button>
+  </div>
   <div id="extraction-result" style="display: none;">
+    <p id="extraction-count"></p>
     <textarea id="registry-output" rows="10" readonly></textarea>
     <button id="copy-registry-btn">Copy to Clipboard</button>
   </div>
@@ -874,28 +885,41 @@ In `src/ui.html`, add a section:
 
 ```typescript
 document.getElementById('extract-registry-btn')?.addEventListener('click', () => {
-  parent.postMessage({ pluginMessage: { type: 'list-libraries' } }, '*');
-});
+  const input = document.getElementById('library-name-input') as HTMLInputElement;
+  const libraryName = input.value.trim();
 
-// Handle library list response
-if (msg.type === 'library-list') {
-  // Show library picker dialog
-  const libraries = msg.payload.libraries;
-  // ... show selection UI
-}
+  if (!libraryName) {
+    alert('Please enter a library name');
+    return;
+  }
+
+  parent.postMessage({
+    pluginMessage: { type: 'extract-registry', payload: { libraryName } }
+  }, '*');
+});
 
 // Handle extraction result
 if (msg.type === 'extraction-result') {
   const output = document.getElementById('registry-output') as HTMLTextAreaElement;
   const container = document.getElementById('extraction-result')!;
+  const countEl = document.getElementById('extraction-count')!;
 
-  output.value = JSON.stringify(msg.payload.registry, null, 2);
+  const registry = msg.payload.registry;
+  const iconCount = Object.keys(registry.icons).length;
+
+  countEl.textContent = `Found ${iconCount} icon${iconCount !== 1 ? 's' : ''}`;
+  output.value = JSON.stringify(registry, null, 2);
   container.style.display = 'block';
 }
 
 document.getElementById('copy-registry-btn')?.addEventListener('click', () => {
   const output = document.getElementById('registry-output') as HTMLTextAreaElement;
   navigator.clipboard.writeText(output.value);
+  // Brief feedback
+  const btn = document.getElementById('copy-registry-btn')!;
+  const original = btn.textContent;
+  btn.textContent = 'Copied!';
+  setTimeout(() => btn.textContent = original, 1500);
 });
 ```
 
@@ -913,7 +937,7 @@ if (msg.type === 'extract-registry' && msg.payload?.libraryName) {
 async function extractIconRegistry(libraryName: string): Promise<IconRegistry> {
   const icons: Record<string, string> = {};
 
-  // Find all instances in the document from this library
+  // Find all instances in the document
   const allNodes = figma.root.findAll(n => n.type === 'INSTANCE') as InstanceNode[];
 
   for (const instance of allNodes) {
@@ -921,28 +945,26 @@ async function extractIconRegistry(libraryName: string): Promise<IconRegistry> {
     if (!mainComponent) continue;
 
     try {
-      // Check if from target library (simplified check)
       const key = mainComponent.key;
+      // Normalize icon name: lowercase, spaces to hyphens
       const name = mainComponent.name.toLowerCase().replace(/\s+/g, '-');
 
       if (!icons[name]) {
         icons[name] = key;
       }
     } catch (e) {
-      // Skip if can't get key
+      // Skip if can't get key (e.g., local component)
     }
   }
 
   return {
+    type: 'icon-registry',  // Sentinel for detection
     library: libraryName.toLowerCase().replace(/\s+/g, '-'),
     figmaLibraryName: libraryName,
     extractedAt: new Date().toISOString(),
     icons,
   };
 }
-```
-
-**Note:** This extraction finds icons already used in the file. For full library extraction, users would need to place all icons from the library into the file first, or use Figma REST API.
 
 **Step 4: Commit**
 
@@ -1034,6 +1056,7 @@ JASOTI supports referencing icons from libraries like Lucide and Material using 
 
 ```json
 {
+  "type": "icon-registry",
   "library": "lucide",
   "figmaLibraryName": "Lucide Icons",
   "extractedAt": "2025-01-02T10:00:00Z",
