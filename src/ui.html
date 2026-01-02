@@ -210,6 +210,25 @@
 <body>
   <h1>JASOTI</h1>
 
+  <!-- Icon Registry Section -->
+  <div class="section">
+    <div style="font-weight: 500; margin-bottom: 8px;">Icon Registry</div>
+    <div style="font-size: 10px; color: #888; margin-bottom: 8px;">
+      Place icons from a library into your file, then extract their keys.
+    </div>
+    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+      <input type="text" id="libraryNameInput" placeholder="Library name (e.g., lucide)"
+        style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+      <button class="secondary" id="extractBtn" style="width: auto; padding: 8px 16px;">Extract</button>
+    </div>
+    <div id="extractionResult" style="display: none;">
+      <div id="extractionCount" style="font-size: 11px; color: #666; margin-bottom: 4px;"></div>
+      <textarea id="registryOutput" rows="6" readonly
+        style="width: 100%; font-size: 10px; font-family: monospace; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"></textarea>
+      <button class="secondary" id="copyRegistryBtn" style="margin-top: 8px;">Copy to Clipboard</button>
+    </div>
+  </div>
+
   <!-- Token Validation Dialog -->
   <div class="dialog-overlay hidden" id="tokenDialog" style="display: none;">
     <div class="dialog">

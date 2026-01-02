@@ -1,6 +1,7 @@
 // src/main.ts
 import { parseSchema, parseSchemas, extractTokenReferences, TokenReference } from './core/parser';
 import { generateFromSchema, buildTokenMaps } from './core/generator';
+import { IconRegistry } from './types/iconRegistry';
 
 figma.showUI(__html__, { width: 400, height: 500 });
 
@@ -113,4 +114,45 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
   if (msg.type === 'cancel') {
     figma.closePlugin();
   }
+
+  if (msg.type === 'extract-registry' && msg.payload?.libraryName) {
+    const libraryName = msg.payload.libraryName as string;
+    const registry = await extractIconRegistry(libraryName);
+    figma.ui.postMessage({
+      type: 'extraction-result',
+      payload: { registry }
+    });
+  }
 };
+
+async function extractIconRegistry(libraryName: string): Promise<IconRegistry> {
+  const icons: Record<string, string> = {};
+
+  // Find all instances in the document
+  const allNodes = figma.root.findAll(n => n.type === 'INSTANCE') as InstanceNode[];
+
+  for (const instance of allNodes) {
+    const mainComponent = instance.mainComponent;
+    if (!mainComponent) continue;
+
+    try {
+      const key = mainComponent.key;
+      // Normalize icon name: lowercase, spaces to hyphens
+      const name = mainComponent.name.toLowerCase().replace(/\s+/g, '-');
+
+      if (!icons[name]) {
+        icons[name] = key;
+      }
+    } catch (e) {
+      // Skip if can't get key (e.g., local component)
+    }
+  }
+
+  return {
+    type: 'icon-registry',
+    library: libraryName.toLowerCase().replace(/\s+/g, '-'),
+    figmaLibraryName: libraryName,
+    extractedAt: new Date().toISOString(),
+    icons,
+  };
+}

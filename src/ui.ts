@@ -38,6 +38,14 @@ const dialogMissingList = document.getElementById('dialogMissingList')!;
 const dialogCancel = document.getElementById('dialogCancel')!;
 const dialogProceed = document.getElementById('dialogProceed')!;
 
+// Extraction elements
+const libraryNameInput = document.getElementById('libraryNameInput') as HTMLInputElement;
+const extractBtn = document.getElementById('extractBtn') as HTMLButtonElement;
+const extractionResult = document.getElementById('extractionResult')!;
+const extractionCount = document.getElementById('extractionCount')!;
+const registryOutput = document.getElementById('registryOutput') as HTMLTextAreaElement;
+const copyRegistryBtn = document.getElementById('copyRegistryBtn')!;
+
 filePicker.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', async (e) => {
@@ -229,6 +237,36 @@ dialogProceed.addEventListener('click', () => {
   proceedWithGeneration();
 });
 
+// Extraction handlers
+extractBtn.addEventListener('click', () => {
+  const libraryName = libraryNameInput.value.trim();
+  if (!libraryName) {
+    alert('Please enter a library name');
+    return;
+  }
+
+  extractBtn.textContent = 'Extracting...';
+  extractBtn.disabled = true;
+
+  parent.postMessage({
+    pluginMessage: {
+      type: 'extract-registry',
+      payload: { libraryName }
+    }
+  }, '*');
+});
+
+copyRegistryBtn.addEventListener('click', () => {
+  registryOutput.select();
+  document.execCommand('copy');
+
+  const original = copyRegistryBtn.textContent;
+  copyRegistryBtn.textContent = 'Copied!';
+  setTimeout(() => {
+    copyRegistryBtn.textContent = original;
+  }, 1500);
+});
+
 // Handle messages from main
 window.onmessage = (event) => {
   const msg = event.data.pluginMessage;
@@ -270,5 +308,17 @@ window.onmessage = (event) => {
       tokenWarnings.classList.remove('hidden');
       tokenWarnings.innerHTML = warnings.map(w => `<div class="warning-item">⚠ ${w}</div>`).join('');
     }
+  }
+
+  if (msg.type === 'extraction-result') {
+    const registry = msg.payload.registry;
+    const iconCount = Object.keys(registry.icons).length;
+
+    extractionCount.textContent = `Found ${iconCount} icon${iconCount !== 1 ? 's' : ''}`;
+    registryOutput.value = JSON.stringify(registry, null, 2);
+    extractionResult.style.display = 'block';
+
+    extractBtn.textContent = 'Extract';
+    extractBtn.disabled = false;
   }
 };
