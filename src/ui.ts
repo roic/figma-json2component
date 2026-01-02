@@ -14,6 +14,8 @@ interface TokenValidationResult {
   missing: Array<{ token: string; type: string; suggestion?: string }>;
   total: number;
   error?: string;
+  iconIssues?: Array<{ iconRef: string; error: string }>;
+  registriesLoaded?: string[];
 }
 
 let currentSchema: ParsedSchema | null = null;
@@ -207,14 +209,35 @@ function proceedWithGeneration() {
 
 function showTokenDialog(result: TokenValidationResult) {
   dialogFoundCount.textContent = String(result.found.length);
-  dialogMissingCount.textContent = String(result.missing.length);
 
-  dialogMissingList.innerHTML = result.missing.map(m => `
-    <div class="missing-item">
-      <div class="missing-token">${m.token}</div>
-      ${m.suggestion ? `<div class="missing-suggestion">Did you mean: ${m.suggestion}?</div>` : ''}
-    </div>
-  `).join('');
+  const totalMissing = result.missing.length + (result.iconIssues?.length || 0);
+  dialogMissingCount.textContent = String(totalMissing);
+
+  let html = '';
+
+  // Token issues
+  if (result.missing.length > 0) {
+    html += '<div style="font-size: 10px; color: #666; margin-bottom: 4px;">Missing tokens:</div>';
+    html += result.missing.map(m => `
+      <div class="missing-item">
+        <div class="missing-token">${m.token}</div>
+        ${m.suggestion ? `<div class="missing-suggestion">Did you mean: ${m.suggestion}?</div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  // Icon issues
+  if (result.iconIssues && result.iconIssues.length > 0) {
+    html += '<div style="font-size: 10px; color: #666; margin: 8px 0 4px;">Icon issues:</div>';
+    html += result.iconIssues.map(i => `
+      <div class="missing-item">
+        <div class="missing-token">${i.iconRef}</div>
+        <div class="missing-suggestion">${i.error}</div>
+      </div>
+    `).join('');
+  }
+
+  dialogMissingList.innerHTML = html;
 
   tokenDialog.style.display = 'flex';
   tokenDialog.classList.remove('hidden');
@@ -284,14 +307,25 @@ window.onmessage = (event) => {
       return;
     }
 
-    // Update token status display
-    if (result.missing.length === 0) {
-      // All tokens found - proceed directly
-      tokenStatus.innerHTML = `<span class="status success">✓ All ${result.total} tokens found</span>`;
+    const hasTokenIssues = result.missing.length > 0;
+    const hasIconIssues = result.iconIssues && result.iconIssues.length > 0;
+    const totalIssues = result.missing.length + (result.iconIssues?.length || 0);
+
+    // Show registries loaded info
+    let statusHtml = '';
+    if (result.registriesLoaded && result.registriesLoaded.length > 0) {
+      statusHtml += `<span class="status">Registries: ${result.registriesLoaded.join(', ')}</span><br>`;
+    }
+
+    if (!hasTokenIssues && !hasIconIssues) {
+      // All good - proceed directly
+      statusHtml += `<span class="status success">All ${result.total} tokens found</span>`;
+      tokenStatus.innerHTML = statusHtml;
       proceedWithGeneration();
     } else {
-      // Some tokens missing - show dialog
-      tokenStatus.innerHTML = `<span class="status warning">⚠ ${result.missing.length} of ${result.total} tokens missing</span>`;
+      // Some issues - show dialog
+      statusHtml += `<span class="status warning">${totalIssues} issue${totalIssues !== 1 ? 's' : ''} found</span>`;
+      tokenStatus.innerHTML = statusHtml;
       showTokenDialog(result);
     }
   }

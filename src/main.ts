@@ -1,7 +1,8 @@
 // src/main.ts
-import { parseSchema, parseSchemas, extractTokenReferences, TokenReference } from './core/parser';
+import { parseSchema, parseSchemas, extractTokenReferences, TokenReference, extractIconRefs } from './core/parser';
 import { generateFromSchema, buildTokenMaps } from './core/generator';
 import { IconRegistry } from './types/iconRegistry';
+import { IconRegistryResolver } from './core/iconRegistry';
 
 figma.showUI(__html__, { width: 400, height: 500 });
 
@@ -71,7 +72,26 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
       }
     }
 
-    figma.ui.postMessage({ type: 'token-validation-result', payload: result });
+    // Add icon validation
+    const iconRefs = extractIconRefs(parseResult.schema);
+    const iconResolver = new IconRegistryResolver(parseResult.registries);
+    const iconIssues: Array<{ iconRef: string; error: string }> = [];
+
+    for (const ref of iconRefs) {
+      const resolved = iconResolver.resolve(ref.iconRef);
+      if (resolved.error) {
+        iconIssues.push({ iconRef: ref.iconRef, error: resolved.error });
+      }
+    }
+
+    figma.ui.postMessage({
+      type: 'token-validation-result',
+      payload: {
+        ...result,
+        iconIssues,
+        registriesLoaded: parseResult.registries.map(r => r.library),
+      }
+    });
     return;
   }
 
