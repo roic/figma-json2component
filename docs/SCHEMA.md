@@ -18,6 +18,7 @@
 - [Layout Properties](#layout-properties)
 - [Style Properties](#style-properties)
 - [Child Nodes](#child-nodes)
+- [Icon Libraries](#icon-libraries)
 - [Design Token Binding](#design-token-binding)
 - [Complete Examples](#complete-examples)
 - [Validation Rules](#validation-rules)
@@ -989,6 +990,70 @@ Native ellipse/circle shape (better than rectangle + full radius workaround).
 
 ---
 
+## Icon Libraries
+
+JASOTI supports referencing icons from libraries like Lucide and Material using human-readable names.
+
+### Setup
+
+1. **Enable the icon library** in Figma (Assets panel → Libraries)
+2. **Extract the registry:**
+   - Open JASOTI → Enter library name (e.g., "lucide")
+   - Place icons from the library into your file
+   - Click Extract → Copy JSON
+3. **Save registry file** to your project:
+   ```
+   figma-components/registries/lucide.json
+   ```
+4. **Select registry files** alongside component files when generating
+
+### Registry File Format
+
+```json
+{
+  "type": "icon-registry",
+  "library": "lucide",
+  "figmaLibraryName": "Lucide Icons",
+  "extractedAt": "2025-01-02T10:00:00Z",
+  "icons": {
+    "search": "component-key-abc123",
+    "home": "component-key-def456",
+    "settings": "component-key-ghi789"
+  }
+}
+```
+
+### Using iconRef
+
+Reference icons with `library:iconName` format:
+
+```json
+{
+  "nodeType": "instance",
+  "name": "SearchIcon",
+  "iconRef": "lucide:search"
+}
+```
+
+### Comparison
+
+| Approach | Use Case |
+|----------|----------|
+| `ref` | Local components from same schema |
+| `iconRef` | Icons from registered libraries (Lucide, Material, etc.) |
+| `componentKey` | Direct key for unregistered library components |
+
+### Missing Icon Behavior
+
+If an icon can't be imported, JASOTI creates a visible placeholder:
+- Red dashed border
+- Original size preserved
+- Warning in results panel
+
+This prevents layout collapse and makes missing icons obvious.
+
+---
+
 ### Instance Node
 
 References another component (local or from a published library).
@@ -1017,7 +1082,8 @@ References another component (local or from a published library).
 - `name`: Figma layer name
 - One of:
   - `ref`: Local component ID (from same schema)
-  - `componentKey`: Published library component key
+  - `iconRef`: Icon library reference (e.g., `"lucide:search"`)
+  - `componentKey`: Direct library component key
 
 **Optional:**
 - `id`: Schema node ID (for tracking)
