@@ -991,58 +991,45 @@ Native ellipse/circle shape (better than rectangle + full radius workaround).
 
 ### Instance Node
 
-Reference to another component (creates an instance).
+References another component (local or from a published library).
 
+**Local component reference:**
 ```json
 {
   "nodeType": "instance",
-  "id": "action-button",
-  "name": "ActionButton",
+  "name": "SubmitButton",
   "ref": "button",
-  "variantProps": {
-    "type": "primary",
-    "state": "default"
-  },
-  "overrides": {
-    "label": { "text": "Submit" }
-  },
-  "layout": {
-    "width": "fill"
-  }
+  "variantProps": { "type": "primary", "state": "default" }
+}
+```
+
+**Published library component (e.g., Lucide icons):**
+```json
+{
+  "nodeType": "instance",
+  "name": "SearchIcon",
+  "componentKey": "abc123def456789..."
 }
 ```
 
 **Required:**
 - `nodeType`: `"instance"`
 - `name`: Figma layer name
-- `ref`: ID of the component or componentSet to instantiate
+- One of:
+  - `ref`: Local component ID (from same schema)
+  - `componentKey`: Published library component key
 
 **Optional:**
-- `id`: Unique within parent (not required for instances)
-- `variantProps`: If `ref` is a componentSet, specifies which variant
-- `overrides`: Text content overrides (keyed by child node `id`)
-- `layout`: Only `width` and `height` supported
+- `id`: Schema node ID (for tracking)
+- `variantProps`: Select variant (works with both `ref` and `componentKey`)
+- `overrides`: Text content overrides
+- `layout`: Override `width` and/or `height`
 
-**Variant Selection:**
-If `ref` points to a componentSet:
-- With `variantProps`: Finds exact variant match
-- Without `variantProps`: Uses first variant (default)
-
-**Text Overrides:**
-```json
-"overrides": {
-  "label": { "text": "Submit" }
-}
-```
-
-Finds child text node with `id: "label"` and sets its text to `"Submit"`.
-
-**How matching works:**
-1. **Primary match**: Searches for nodes with `pluginData('jasoti.nodeId') === 'label'` (most reliable)
-2. **Fallback match**: If no pluginData match found, searches for nodes with `name === 'label'` (backward compatibility)
-3. **Warning**: If fallback matching is used, shows a warning suggesting regeneration of the referenced component for reliable matching
-
-**Best practice:** Regenerate components using the latest plugin version to ensure all child nodes have pluginData for reliable text overrides.
+**How to get a componentKey:**
+1. Ensure the library is enabled in your Figma file (Assets panel → Team library)
+2. Right-click a component in the Assets panel
+3. "Copy/Paste as" → "Copy link"
+4. The key is embedded in the URL, or use Dev Mode's "Copy component key"
 
 ---
 
@@ -1553,7 +1540,7 @@ Opacity values must be between 0 (fully transparent) and 1 (fully opaque).
 **Instance node:**
 - `name` ✓
 - `nodeType` ✓
-- `ref` ✓
+- One of: `ref` ✓ or `componentKey` ✓
 
 ---
 
