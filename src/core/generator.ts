@@ -257,6 +257,57 @@ async function buildContext(warnings: string[]): Promise<GenerationContext> {
 }
 
 /**
+ * Parse a Figma variant name like "type=primary, state=default" into props object.
+ * Returns normalized props sorted alphabetically by key.
+ */
+function parseVariantName(name: string): Record<string, string> {
+  const props: Record<string, string> = {};
+  const parts = name.split(',').map(s => s.trim());
+
+  for (const part of parts) {
+    const [key, value] = part.split('=').map(s => s.trim());
+    if (key && value !== undefined) {
+      props[key] = value;
+    }
+  }
+
+  return props;
+}
+
+/**
+ * Build a normalized variant key for comparison.
+ * Sorts props alphabetically to ensure consistent matching.
+ */
+function buildVariantKey(props: Record<string, string>): string {
+  return Object.entries(props)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join(', ');
+}
+
+/**
+ * Find a variant in a ComponentSet by its props.
+ */
+function findVariantByProps(
+  componentSet: ComponentSetNode,
+  props: Record<string, string>
+): ComponentNode | null {
+  const targetKey = buildVariantKey(props);
+
+  for (const child of componentSet.children) {
+    if (child.type === 'COMPONENT') {
+      const childProps = parseVariantName(child.name);
+      const childKey = buildVariantKey(childProps);
+      if (childKey === targetKey) {
+        return child;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Generate all possible lookup keys for a variable.
  * Handles Tokens Studio naming variations.
  */
@@ -406,7 +457,104 @@ async function createOrUpdateComponentSet(
   def: ComponentSetDefinition,
   context: GenerationContext
 ): Promise<ComponentSetNode> {
-  // First, create all variant components
+  const existingSet = context.componentMap.get(def.id) as ComponentSetNode | undefined;
+
+  // Track which variant keys we process (for stale variant removal)
+  const processedVariantKeys = new Set<string>();
+
+  if (existingSet && existingSet.type === 'COMPONENT_SET') {
+    // UPDATE IN PLACE - preserves Figma node identity and instance connections
+    console.log(`Updating component set "${def.name}" in place`);
+
+    existingSet.name = def.name;
+    if (def.description) existingSet.description = def.description;
+
+    for (const variant of def.variants) {
+      const variantName = def.variantProps
+        .map(prop => `${prop}=${variant.props[prop]}`)
+        .join(', ');
+
+      const variantKey = buildVariantKey(variant.props);
+      processedVariantKeys.add(variantKey);
+
+      // Find existing variant by props
+      const existingVariant = findVariantByProps(existingSet, variant.props);
+
+      if (existingVariant) {
+        // Update existing variant in place
+        existingVariant.name = variantName;
+        existingVariant.children.forEach(c => c.remove());
+
+        // Apply base layout first
+        applyLayout(existingVariant, def.base.layout, context);
+
+        // Apply variant layout overrides (if any)
+        if (variant.layout) {
+          applyLayout(existingVariant, variant.layout as LayoutProps, context);
+        }
+
+        // Apply merged styles
+        const mergedStyles: StyleProps = { ...def.base, ...variant };
+        await applyStyles(existingVariant, mergedStyles, context);
+
+        // Recreate children
+        if (def.base.children) {
+          for (const childDef of def.base.children) {
+            const child = await createChildNode(childDef, context);
+            if (child) existingVariant.appendChild(child);
+          }
+        }
+      } else {
+        // Create new variant and add to existing set
+        const newVariant = figma.createComponent();
+        newVariant.name = variantName;
+
+        applyLayout(newVariant, def.base.layout, context);
+        if (variant.layout) {
+          applyLayout(newVariant, variant.layout as LayoutProps, context);
+        }
+
+        const mergedStyles: StyleProps = { ...def.base, ...variant };
+        await applyStyles(newVariant, mergedStyles, context);
+
+        if (def.base.children) {
+          for (const childDef of def.base.children) {
+            const child = await createChildNode(childDef, context);
+            if (child) newVariant.appendChild(child);
+          }
+        }
+
+        // Add to existing component set
+        existingSet.appendChild(newVariant);
+        console.log(`  Added new variant: ${variantName}`);
+      }
+    }
+
+    // Remove stale variants (exist in Figma but not in schema)
+    const variantsToRemove: ComponentNode[] = [];
+    for (const child of existingSet.children) {
+      if (child.type === 'COMPONENT') {
+        const childProps = parseVariantName(child.name);
+        const childKey = buildVariantKey(childProps);
+        if (!processedVariantKeys.has(childKey)) {
+          variantsToRemove.push(child);
+        }
+      }
+    }
+
+    for (const staleVariant of variantsToRemove) {
+      console.log(`  Removing stale variant: ${staleVariant.name}`);
+      context.warnings.push(`Removed variant '${staleVariant.name}' from '${def.name}' - instances may be detached`);
+      staleVariant.remove();
+    }
+
+    console.log(`Updated component set "${def.name}" with ${existingSet.children.length} variants`);
+    return existingSet;
+  }
+
+  // CREATE NEW - no existing set found
+  console.log(`Creating new component set "${def.name}"`);
+
   const variantComponents: ComponentNode[] = [];
 
   for (const variant of def.variants) {
@@ -417,31 +565,14 @@ async function createOrUpdateComponentSet(
     const comp = figma.createComponent();
     comp.name = variantName;
 
-    // Apply base layout first
     applyLayout(comp, def.base.layout, context);
-
-    // Apply variant layout overrides (if any)
     if (variant.layout) {
       applyLayout(comp, variant.layout as LayoutProps, context);
     }
 
-    // Apply merged styles (base + variant overrides)
-    const mergedStyles: StyleProps = {
-      ...def.base,
-      ...variant,
-    };
-
-    // Debug logging for token binding
-    if (mergedStyles.radiusToken) {
-      console.log(`[${comp.name}] radiusToken: ${mergedStyles.radiusToken}`);
-    }
-    if (mergedStyles.fillToken) {
-      console.log(`[${comp.name}] fillToken: ${mergedStyles.fillToken}`);
-    }
-
+    const mergedStyles: StyleProps = { ...def.base, ...variant };
     await applyStyles(comp, mergedStyles, context);
 
-    // Create children from base
     if (def.base.children) {
       for (const childDef of def.base.children) {
         const child = await createChildNode(childDef, context);
@@ -451,15 +582,6 @@ async function createOrUpdateComponentSet(
 
     variantComponents.push(comp);
   }
-
-  // Combine into component set
-  const existingSet = context.componentMap.get(def.id) as ComponentSetNode | undefined;
-  if (existingSet && existingSet.type === 'COMPONENT_SET') {
-    // Remove old set (will also remove its children)
-    existingSet.remove();
-  }
-
-  console.log(`Combining ${variantComponents.length} variants into component set "${def.name}"`);
 
   const componentSet = figma.combineAsVariants(variantComponents, figma.currentPage);
   componentSet.name = def.name;
