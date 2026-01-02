@@ -17,7 +17,7 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
 
     const parseResult = jsonFiles && jsonFiles.length > 0
       ? parseSchemas(jsonFiles)
-      : { valid: false, errors: [{ path: '', message: 'No JSON provided' }], warnings: [], schema: undefined };
+      : { valid: false, errors: [{ path: '', message: 'No JSON provided' }], warnings: [], schema: undefined, registries: [] };
 
     if (!parseResult.valid || !parseResult.schema) {
       figma.ui.postMessage({
@@ -82,7 +82,7 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
       ? parseSchemas(jsonFiles)
       : json
       ? parseSchema(json)
-      : { valid: false, errors: [{ path: '', message: 'No JSON provided' }], warnings: [] };
+      : { valid: false, errors: [{ path: '', message: 'No JSON provided' }], warnings: [], registries: [] };
 
     if (!parseResult.valid || !parseResult.schema) {
       figma.notify(`Parse error: ${parseResult.errors[0]?.message || 'Unknown error'}`, { error: true });
@@ -91,7 +91,7 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
     }
 
     // Generate components
-    const result = await generateFromSchema(parseResult.schema, selectedIds);
+    const result = await generateFromSchema(parseResult.schema, selectedIds, parseResult.registries);
 
     if (!result.success) {
       figma.notify(`Generation error: ${result.error}`, { error: true });
