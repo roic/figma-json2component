@@ -1,9 +1,10 @@
 // src/core/parser.ts
 import type { Schema, ValidationResult, ValidationError, ComponentDefinition, ComponentSetDefinition, ChildNode, LayoutProps, StyleProps, RectangleNode, Organization } from '../types/schema';
-import { parseIconRef } from '../types/iconRegistry';
+import { parseIconRef, isIconRegistry, IconRegistry } from '../types/iconRegistry';
 
 export interface ParseResult extends ValidationResult {
   schema?: Schema;
+  registries: IconRegistry[];
 }
 
 /**
@@ -16,15 +17,36 @@ export function parseSchemas(jsonStrings: string[]): ParseResult {
       valid: false,
       errors: [{ path: '', message: 'No schemas provided' }],
       warnings: [],
+      registries: [],
     };
   }
 
-  // Parse each schema individually
+  // Parse each file - detect registries vs schemas
   const parsedSchemas: Schema[] = [];
+  const registries: IconRegistry[] = [];
   const allErrors: ValidationError[] = [];
   const allWarnings: ValidationError[] = [];
 
   jsonStrings.forEach((jsonString, index) => {
+    // First, try to parse as JSON to check if it's a registry
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonString);
+    } catch (e) {
+      allErrors.push({
+        path: `[file ${index + 1}]`,
+        message: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`,
+      });
+      return;
+    }
+
+    // Check if this is an icon registry
+    if (isIconRegistry(parsed)) {
+      registries.push(parsed);
+      return;
+    }
+
+    // Otherwise, treat as component schema
     const result = parseSchema(jsonString);
     if (result.valid && result.schema) {
       parsedSchemas.push(result.schema);
@@ -46,6 +68,7 @@ export function parseSchemas(jsonStrings: string[]): ParseResult {
       valid: false,
       errors: allErrors,
       warnings: allWarnings,
+      registries,
     };
   }
 
@@ -81,6 +104,7 @@ export function parseSchemas(jsonStrings: string[]): ParseResult {
       valid: false,
       errors: allErrors,
       warnings: allWarnings,
+      registries,
     };
   }
 
@@ -92,6 +116,7 @@ export function parseSchemas(jsonStrings: string[]): ParseResult {
     errors: [],
     warnings: allWarnings,
     schema: mergedSchema,
+    registries,
   };
 }
 
@@ -139,6 +164,7 @@ export function parseSchema(jsonString: string): ParseResult {
       valid: false,
       errors: [{ path: '', message: `JSON parse error: ${message}` }],
       warnings: [],
+      registries: [],
     };
   }
 
@@ -148,6 +174,7 @@ export function parseSchema(jsonString: string): ParseResult {
       valid: false,
       errors: [{ path: '', message: 'Schema must be an object' }],
       warnings: [],
+      registries: [],
     };
   }
 
@@ -225,6 +252,7 @@ export function parseSchema(jsonString: string): ParseResult {
     errors,
     warnings,
     schema: errors.length === 0 ? result : undefined,
+    registries: [],
   };
 }
 
