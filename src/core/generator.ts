@@ -674,69 +674,102 @@ async function createInstanceNode(
   def: Extract<ChildNode, { nodeType: 'instance' }>,
   context: GenerationContext
 ): Promise<InstanceNode | null> {
-  const target = context.componentMap.get(def.ref);
+  let mainComponent: ComponentNode | null = null;
 
-  if (!target) {
-    context.warnings.push(`Component '${def.ref}' not found for instance`);
-    return null;
+  // Case 1: Library component via componentKey
+  if (def.componentKey) {
+    try {
+      const imported = await figma.importComponentByKeyAsync(def.componentKey);
+      if (imported.type === 'COMPONENT') {
+        mainComponent = imported;
+      } else if (imported.type === 'COMPONENT_SET') {
+        // Check if the component set has variants
+        if (imported.children.length === 0) {
+          context.warnings.push(`Imported ComponentSet '${def.componentKey}' has no variants`);
+          return null;
+        }
+        // If it's a component set, find the right variant or use first
+        if (def.variantProps) {
+          const variantName = Object.entries(def.variantProps)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(', ');
+          const variant = imported.findChild(c => c.name === variantName) as ComponentNode;
+          mainComponent = variant || (imported.children[0] as ComponentNode);
+        } else {
+          mainComponent = imported.children[0] as ComponentNode;
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      context.warnings.push(`Failed to import library component '${def.componentKey}': ${message}`);
+      console.warn(`⚠️ Failed to import library component: ${message}`);
+      return null;
+    }
   }
+  // Case 2: Local component via ref
+  else if (def.ref) {
+    const target = context.componentMap.get(def.ref);
 
-  let mainComponent: ComponentNode;
-
-  if (target.type === 'COMPONENT_SET') {
-    // Check if component set has any children
-    if (target.children.length === 0) {
-      context.warnings.push(`ComponentSet '${def.ref}' has no variants`);
+    if (!target) {
+      context.warnings.push(`Component '${def.ref}' not found for instance`);
       return null;
     }
 
-    // Find specific variant
-    if (def.variantProps) {
-      const variantName = Object.entries(def.variantProps)
-        .map(([k, v]) => `${k}=${v}`)
-        .join(', ');
-      const variant = target.findChild(c => c.name === variantName) as ComponentNode;
-      if (variant) {
-        mainComponent = variant;
+    if (target.type === 'COMPONENT_SET') {
+      if (target.children.length === 0) {
+        context.warnings.push(`ComponentSet '${def.ref}' has no variants`);
+        return null;
+      }
+
+      if (def.variantProps) {
+        const variantName = Object.entries(def.variantProps)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(', ');
+        const variant = target.findChild(c => c.name === variantName) as ComponentNode;
+        mainComponent = variant || (target.children[0] as ComponentNode);
+        if (!variant) {
+          context.warnings.push(`Variant '${variantName}' not found in '${def.ref}', using first variant`);
+        }
       } else {
-        // Use first variant
         mainComponent = target.children[0] as ComponentNode;
-        context.warnings.push(`Variant '${variantName}' not found in '${def.ref}', using default`);
       }
     } else {
-      mainComponent = target.children[0] as ComponentNode;
+      mainComponent = target;
     }
-  } else {
-    mainComponent = target;
   }
 
+  if (!mainComponent) {
+    return null;
+  }
+
+  // Create instance
   const instance = mainComponent.createInstance();
+  instance.name = def.name;
+
+  // Store schema node ID if provided
+  if (def.id) {
+    instance.setPluginData(PLUGIN_DATA_NODE_ID, def.id);
+  }
 
   // Apply sizing
   if (def.layout) {
-    let needsResize = false;
-    let newWidth = instance.width;
-    let newHeight = instance.height;
-
-    if (def.layout.width === 'fill') instance.layoutSizingHorizontal = 'FILL';
-    else if (def.layout.width === 'hug') instance.layoutSizingHorizontal = 'HUG';
-    else if (typeof def.layout.width === 'number') {
-      instance.layoutSizingHorizontal = 'FIXED';
-      newWidth = def.layout.width;
-      needsResize = true;
+    if (def.layout.width !== undefined) {
+      if (def.layout.width === 'fill') {
+        instance.layoutSizingHorizontal = 'FILL';
+      } else if (def.layout.width === 'hug') {
+        instance.layoutSizingHorizontal = 'HUG';
+      } else if (typeof def.layout.width === 'number') {
+        instance.resize(def.layout.width, instance.height);
+      }
     }
-
-    if (def.layout.height === 'fill') instance.layoutSizingVertical = 'FILL';
-    else if (def.layout.height === 'hug') instance.layoutSizingVertical = 'HUG';
-    else if (typeof def.layout.height === 'number') {
-      instance.layoutSizingVertical = 'FIXED';
-      newHeight = def.layout.height;
-      needsResize = true;
-    }
-
-    // Single resize call if needed
-    if (needsResize) {
-      instance.resize(newWidth, newHeight);
+    if (def.layout.height !== undefined) {
+      if (def.layout.height === 'fill') {
+        instance.layoutSizingVertical = 'FILL';
+      } else if (def.layout.height === 'hug') {
+        instance.layoutSizingVertical = 'HUG';
+      } else if (typeof def.layout.height === 'number') {
+        instance.resize(instance.width, def.layout.height);
+      }
     }
   }
 
@@ -744,40 +777,26 @@ async function createInstanceNode(
   if (def.overrides) {
     for (const [nodeId, override] of Object.entries(def.overrides)) {
       if (override.text !== undefined) {
-        // First try to find by pluginData (most reliable)
-        let matches = instance.findAll(n =>
+        // Find by pluginData first (reliable), fallback to name
+        let targetNode = instance.findOne(n =>
           n.type === 'TEXT' && n.getPluginData(PLUGIN_DATA_NODE_ID) === nodeId
-        ) as TextNode[];
+        ) as TextNode | null;
 
-        // Fallback to name matching if no pluginData match found
-        if (matches.length === 0) {
-          matches = instance.findAll(n =>
+        if (!targetNode) {
+          targetNode = instance.findOne(n =>
             n.type === 'TEXT' && n.name === nodeId
-          ) as TextNode[];
+          ) as TextNode | null;
 
-          if (matches.length > 0) {
+          if (targetNode) {
             context.warnings.push(
-              `Text override '${nodeId}' matched by name (not schema ID). ` +
-              `Consider regenerating '${def.ref}' for reliable matching.`
+              `Text override for '${nodeId}' matched by name. Regenerate '${def.ref || def.componentKey}' for reliable matching.`
             );
           }
         }
 
-        if (matches.length === 0) {
-          context.warnings.push(`Text override target '${nodeId}' not found in instance of '${def.ref}'`);
-        } else if (matches.length > 1) {
-          context.warnings.push(`Text override target '${nodeId}' matched ${matches.length} nodes in instance of '${def.ref}', using first match`);
-        }
-
-        if (matches.length > 0) {
-          const textNode = matches[0];
-          try {
-            await figma.loadFontAsync(textNode.fontName as FontName);
-            textNode.characters = override.text;
-          } catch (e) {
-            const message = e instanceof Error ? e.message : 'Unknown error';
-            context.warnings.push(`Failed to apply text override to '${nodeId}': ${message}`);
-          }
+        if (targetNode) {
+          await figma.loadFontAsync(targetNode.fontName as FontName);
+          targetNode.characters = override.text;
         }
       }
     }
