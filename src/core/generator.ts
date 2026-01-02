@@ -11,6 +11,8 @@ import type {
 } from '../types/schema';
 import { resolveDependencies } from './resolver';
 import { resolveVariable, resolveTextStyle, formatResolutionError, validateVariableType } from './tokenResolver';
+import { IconRegistryResolver } from './iconRegistry';
+import { IconRegistry } from '../types/iconRegistry';
 
 const PLUGIN_DATA_KEY = 'jasoti.id';
 const PLUGIN_DATA_NODE_ID = 'jasoti.nodeId';
@@ -20,6 +22,7 @@ interface GenerationContext {
   variableMap: Map<string, Variable>;
   textStyleMap: Map<string, TextStyle>;
   effectStyleMap: Map<string, EffectStyle>;
+  iconResolver: IconRegistryResolver;
   warnings: string[];
 }
 
@@ -45,7 +48,8 @@ export interface GenerateResult {
 
 export async function generateFromSchema(
   schema: Schema,
-  selectedIds: string[]
+  selectedIds: string[],
+  registries: IconRegistry[] = []
 ): Promise<GenerateResult> {
   const warnings: string[] = [];
 
@@ -56,7 +60,7 @@ export async function generateFromSchema(
   }
 
   // Build context
-  const context = await buildContext(warnings);
+  const context = await buildContext(warnings, registries);
 
   // Expand selected IDs to include all dependencies
   const selectedSet = new Set(selectedIds);
@@ -165,7 +169,7 @@ export async function buildTokenMaps(): Promise<{
   return { variableMap, textStyleMap, effectStyleMap };
 }
 
-async function buildContext(warnings: string[]): Promise<GenerationContext> {
+async function buildContext(warnings: string[], registries: IconRegistry[] = []): Promise<GenerationContext> {
   // Get existing components created by this plugin
   const componentMap = new Map<string, ComponentNode | ComponentSetNode>();
   const allComponents = figma.currentPage.findAll(n =>
@@ -253,7 +257,10 @@ async function buildContext(warnings: string[]): Promise<GenerationContext> {
     }
   }
 
-  return { componentMap, variableMap, textStyleMap, effectStyleMap, warnings };
+  // Build icon resolver from registries
+  const iconResolver = new IconRegistryResolver(registries);
+
+  return { componentMap, variableMap, textStyleMap, effectStyleMap, iconResolver, warnings };
 }
 
 /**
@@ -792,22 +799,69 @@ async function createEllipseNode(
   return ellipse;
 }
 
+/**
+ * Create a visible placeholder frame for a missing icon/component.
+ * Shows red dashed border to make it obvious something is missing.
+ */
+function createMissingIconPlaceholder(
+  def: Extract<ChildNode, { nodeType: 'instance' }>,
+  errorMessage: string
+): FrameNode {
+  const placeholder = figma.createFrame();
+  placeholder.name = `⚠️ ${def.name} (missing)`;
+
+  // Size: use requested size or default 24x24 (common icon size)
+  const width = typeof def.layout?.width === 'number' ? def.layout.width : 24;
+  const height = typeof def.layout?.height === 'number' ? def.layout.height : 24;
+  placeholder.resize(width, height);
+
+  // Style: red dashed border, no fill
+  placeholder.fills = [];
+  placeholder.strokes = [{ type: 'SOLID', color: { r: 1, g: 0.3, b: 0.3 } }];
+  placeholder.strokeWeight = 1;
+  placeholder.dashPattern = [2, 2];
+
+  // Store error for debugging
+  placeholder.setPluginData('jasoti.error', errorMessage);
+
+  if (def.id) {
+    placeholder.setPluginData(PLUGIN_DATA_NODE_ID, def.id);
+  }
+
+  return placeholder;
+}
+
 async function createInstanceNode(
   def: Extract<ChildNode, { nodeType: 'instance' }>,
   context: GenerationContext
-): Promise<InstanceNode | null> {
+): Promise<InstanceNode | FrameNode | null> {
   let mainComponent: ComponentNode | null = null;
+  let componentKey: string | undefined = def.componentKey;
+  let iconRefSource: string | undefined;
 
-  // Case 1: Library component via componentKey
-  if (def.componentKey) {
+  // Case 0: Resolve iconRef to componentKey first
+  if (def.iconRef) {
+    iconRefSource = def.iconRef;
+    const resolved = context.iconResolver.resolve(def.iconRef);
+
+    if (resolved.error) {
+      context.warnings.push(resolved.error);
+      return createMissingIconPlaceholder(def, resolved.error);
+    }
+
+    componentKey = resolved.componentKey!;
+  }
+
+  // Case 1: Library component via componentKey (includes resolved iconRef)
+  if (componentKey) {
     try {
-      const imported = await figma.importComponentByKeyAsync(def.componentKey);
+      const imported = await figma.importComponentByKeyAsync(componentKey);
       if (imported.type === 'COMPONENT') {
         mainComponent = imported;
       } else if (imported.type === 'COMPONENT_SET') {
         // Check if the component set has variants
         if (imported.children.length === 0) {
-          context.warnings.push(`Imported ComponentSet '${def.componentKey}' has no variants`);
+          context.warnings.push(`Imported ComponentSet '${iconRefSource || componentKey}' has no variants`);
           return null;
         }
         // If it's a component set, find the right variant or use first
@@ -823,9 +877,10 @@ async function createInstanceNode(
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      context.warnings.push(`Failed to import library component '${def.componentKey}': ${message}`);
-      console.warn(`⚠️ Failed to import library component: ${message}`);
-      return null;
+      const source = iconRefSource || componentKey;
+      const errorMsg = `Couldn't import '${source}'. Check that the library is enabled and the registry matches your library version.`;
+      context.warnings.push(errorMsg);
+      return createMissingIconPlaceholder(def, errorMsg);
     }
   }
   // Case 2: Local component via ref
