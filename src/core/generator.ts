@@ -137,13 +137,16 @@ async function buildContext(warnings: string[]): Promise<GenerationContext> {
       for (const key of keys) {
         if (variableMap.has(key)) {
           const existing = variableMap.get(key)!;
-          const existingCollection = collections.find(c => c.variableIds.includes(existing.id))?.name || 'unknown';
-          console.warn(
-            `⚠️ Variable key collision: '${key}' maps to both ` +
-            `'${existing.name}' (collection: ${existingCollection}) and ` +
-            `'${variable.name}' (collection: ${collection.name}). ` +
-            `Using latest match: '${variable.name}'.`
-          );
+          // Only warn if it's a different variable (real collision), not duplicate key for same variable
+          if (existing.id !== variable.id) {
+            const existingCollection = collections.find(c => c.variableIds.includes(existing.id))?.name || 'unknown';
+            console.warn(
+              `⚠️ Variable key collision: '${key}' maps to both ` +
+              `'${existing.name}' (collection: ${existingCollection}) and ` +
+              `'${variable.name}' (collection: ${collection.name}). ` +
+              `Using latest match: '${variable.name}'.`
+            );
+          }
         }
         variableMap.set(key, variable);
       }
@@ -159,11 +162,14 @@ async function buildContext(warnings: string[]): Promise<GenerationContext> {
     for (const key of keys) {
       if (textStyleMap.has(key)) {
         const existing = textStyleMap.get(key)!;
-        console.warn(
-          `⚠️ Text style key collision: '${key}' maps to both ` +
-          `'${existing.name}' and '${style.name}'. ` +
-          `Using latest match: '${style.name}'.`
-        );
+        // Only warn if it's a different style (real collision), not duplicate key for same style
+        if (existing.id !== style.id) {
+          console.warn(
+            `⚠️ Text style key collision: '${key}' maps to both ` +
+            `'${existing.name}' and '${style.name}'. ` +
+            `Using latest match: '${style.name}'.`
+          );
+        }
       }
       textStyleMap.set(key, style);
     }
@@ -178,11 +184,14 @@ async function buildContext(warnings: string[]): Promise<GenerationContext> {
     for (const key of keys) {
       if (effectStyleMap.has(key)) {
         const existing = effectStyleMap.get(key)!;
-        console.warn(
-          `⚠️ Effect style key collision: '${key}' maps to both ` +
-          `'${existing.name}' and '${style.name}'. ` +
-          `Using latest match: '${style.name}'.`
-        );
+        // Only warn if it's a different style (real collision), not duplicate key for same style
+        if (existing.id !== style.id) {
+          console.warn(
+            `⚠️ Effect style key collision: '${key}' maps to both ` +
+            `'${existing.name}' and '${style.name}'. ` +
+            `Using latest match: '${style.name}'.`
+          );
+        }
       }
       effectStyleMap.set(key, style);
     }
