@@ -81,7 +81,8 @@ export interface InstanceNode {
   nodeType: 'instance';
   id?: string;
   name: string;
-  ref: string;
+  ref?: string;           // Local component reference
+  componentKey?: string;  // Published library component key
   variantProps?: Record<string, string>;
   overrides?: Record<string, { text?: string }>;
   layout?: Pick<LayoutProps, 'width' | 'height'>;
