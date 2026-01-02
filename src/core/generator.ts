@@ -109,6 +109,62 @@ export async function generateFromSchema(
   return { success: true, warnings: context.warnings, createdCount };
 }
 
+/**
+ * Build token lookup maps for validation.
+ * Exported for pre-flight token validation.
+ */
+export async function buildTokenMaps(): Promise<{
+  variableMap: Map<string, Variable>;
+  textStyleMap: Map<string, TextStyle>;
+  effectStyleMap: Map<string, EffectStyle>;
+}> {
+  // Build collection-aware variable index
+  const variableMap = new Map<string, Variable>();
+  const collections = figma.variables.getLocalVariableCollections();
+
+  for (const collection of collections) {
+    for (const variableId of collection.variableIds) {
+      const variable = figma.variables.getVariableById(variableId);
+      if (!variable) continue;
+
+      const keys = generateVariableKeys(variable.name, collection.name);
+      for (const key of keys) {
+        if (!variableMap.has(key) || variableMap.get(key)!.id === variable.id) {
+          variableMap.set(key, variable);
+        }
+      }
+    }
+  }
+
+  // Build text style index
+  const textStyleMap = new Map<string, TextStyle>();
+  const textStyles = await figma.getLocalTextStylesAsync();
+
+  for (const style of textStyles) {
+    const keys = generateStyleKeys(style.name);
+    for (const key of keys) {
+      if (!textStyleMap.has(key) || textStyleMap.get(key)!.id === style.id) {
+        textStyleMap.set(key, style);
+      }
+    }
+  }
+
+  // Build effect style index
+  const effectStyleMap = new Map<string, EffectStyle>();
+  const effectStyles = figma.getLocalEffectStyles();
+
+  for (const style of effectStyles) {
+    const keys = generateStyleKeys(style.name);
+    for (const key of keys) {
+      if (!effectStyleMap.has(key) || effectStyleMap.get(key)!.id === style.id) {
+        effectStyleMap.set(key, style);
+      }
+    }
+  }
+
+  return { variableMap, textStyleMap, effectStyleMap };
+}
+
 async function buildContext(warnings: string[]): Promise<GenerationContext> {
   // Get existing components created by this plugin
   const componentMap = new Map<string, ComponentNode | ComponentSetNode>();
@@ -121,7 +177,7 @@ async function buildContext(warnings: string[]): Promise<GenerationContext> {
     if (id) componentMap.set(id, c as ComponentNode | ComponentSetNode);
   });
 
-  // Build collection-aware variable index
+  // Build collection-aware variable index (with warnings)
   const variableMap = new Map<string, Variable>();
   const collections = figma.variables.getLocalVariableCollections();
 
@@ -449,6 +505,11 @@ async function createFrameNode(
   if (def.layout) applyLayout(frame, def.layout, context);
   await applyStyles(frame, def, context);
 
+  // Apply image fill if specified
+  if (def.imageUrl) {
+    await applyImageFill(frame, def.imageUrl, def.imageScaleMode, context);
+  }
+
   if (def.children) {
     for (const childDef of def.children) {
       const child = await createChildNode(childDef, context);
@@ -579,6 +640,11 @@ async function createRectangleNode(
   }
 
   await applyStyles(rect, def, context);
+
+  // Apply image fill if specified
+  if (def.imageUrl) {
+    await applyImageFill(rect, def.imageUrl, def.imageScaleMode, context);
+  }
 
   return rect;
 }
@@ -890,6 +956,30 @@ function applySizing(
     } else {
       node.resize(node.width, size);
     }
+  }
+}
+
+/**
+ * Apply an image fill from a URL.
+ */
+async function applyImageFill(
+  node: GeometryMixin & MinimalFillsMixin,
+  imageUrl: string,
+  scaleMode: 'FILL' | 'FIT' | 'CROP' | 'TILE' | undefined,
+  context: GenerationContext
+): Promise<void> {
+  try {
+    const image = await figma.createImageAsync(imageUrl);
+    const imagePaint: ImagePaint = {
+      type: 'IMAGE',
+      imageHash: image.hash,
+      scaleMode: scaleMode || 'FILL',
+    };
+    node.fills = [imagePaint];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    context.warnings.push(`Failed to load image '${imageUrl}': ${message}`);
+    console.warn(`⚠️ Failed to load image '${imageUrl}': ${message}`);
   }
 }
 

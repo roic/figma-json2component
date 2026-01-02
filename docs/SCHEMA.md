@@ -862,6 +862,8 @@ Nested frame with its own layout and children.
 - `layout`: [Layout Properties](#layout-properties)
 - All [Style Properties](#style-properties)
 - `children`: Array of child nodes (recursive)
+- `imageUrl`: URL to fetch and apply as image fill
+- `imageScaleMode`: `"FILL"` (default), `"FIT"`, `"CROP"`, or `"TILE"`
 
 ---
 
@@ -894,7 +896,7 @@ Text label with optional content and styling.
 
 ### Rectangle Node
 
-Simple rectangle shape (for dividers, backgrounds).
+Simple rectangle shape (for dividers, backgrounds, image placeholders).
 
 ```json
 {
@@ -918,6 +920,21 @@ Simple rectangle shape (for dividers, backgrounds).
 - `layout`: Only `width` and `height` supported
 - `fillToken`, `strokeToken`, `strokeWidth`, `strokeDash`, `radiusToken`
 - `opacity`, `opacityToken`, `fillOpacity`, `fillOpacityToken`
+- `imageUrl`: URL to fetch and apply as image fill
+- `imageScaleMode`: `"FILL"` (default), `"FIT"`, `"CROP"`, or `"TILE"`
+
+**Example - Image placeholder:**
+```json
+{
+  "nodeType": "rectangle",
+  "id": "hero-image",
+  "name": "HeroImage",
+  "layout": { "width": 400, "height": 300 },
+  "imageUrl": "https://picsum.photos/400/300",
+  "imageScaleMode": "FILL",
+  "radiusToken": "radius.md"
+}
+```
 
 ---
 

@@ -51,6 +51,8 @@ export interface BaseNode {
   name: string;
 }
 
+export type ImageScaleMode = 'FILL' | 'FIT' | 'CROP' | 'TILE';
+
 export interface FrameNode extends BaseNode {
   nodeType: 'frame';
   layout?: LayoutProps;
@@ -59,6 +61,8 @@ export interface FrameNode extends BaseNode {
   strokeWidth?: number;
   radiusToken?: string;
   shadowToken?: string;
+  imageUrl?: string;
+  imageScaleMode?: ImageScaleMode;
   children?: ChildNode[];
 }
 
@@ -95,6 +99,8 @@ export interface RectangleNode extends BaseNode {
   opacityToken?: string;
   fillOpacity?: number;
   fillOpacityToken?: string;
+  imageUrl?: string;
+  imageScaleMode?: ImageScaleMode;
 }
 
 export interface EllipseNode extends BaseNode {

@@ -9,7 +9,15 @@ interface ParsedSchema {
   warnings: Array<{ path: string; message: string }>;
 }
 
+interface TokenValidationResult {
+  found: Array<{ token: string; type: string }>;
+  missing: Array<{ token: string; type: string; suggestion?: string }>;
+  total: number;
+  error?: string;
+}
+
 let currentSchema: ParsedSchema | null = null;
+let pendingGeneration = false;
 
 // File picker handling
 const filePicker = document.getElementById('filePicker')!;
@@ -21,6 +29,14 @@ const tokenSection = document.getElementById('tokenSection')!;
 const tokenStatus = document.getElementById('tokenStatus')!;
 const tokenWarnings = document.getElementById('tokenWarnings')!;
 const generateBtn = document.getElementById('generateBtn') as HTMLButtonElement;
+
+// Dialog elements
+const tokenDialog = document.getElementById('tokenDialog')!;
+const dialogFoundCount = document.getElementById('dialogFoundCount')!;
+const dialogMissingCount = document.getElementById('dialogMissingCount')!;
+const dialogMissingList = document.getElementById('dialogMissingList')!;
+const dialogCancel = document.getElementById('dialogCancel')!;
+const dialogProceed = document.getElementById('dialogProceed')!;
 
 filePicker.addEventListener('click', () => fileInput.click());
 
@@ -144,6 +160,25 @@ generateBtn.addEventListener('click', () => {
   const jsonContents = (window as { jsonContents?: string[] }).jsonContents;
   if (!jsonContents || jsonContents.length === 0) return;
 
+  // First, validate tokens
+  generateBtn.textContent = 'Checking tokens...';
+  generateBtn.disabled = true;
+  pendingGeneration = true;
+
+  parent.postMessage({
+    pluginMessage: {
+      type: 'validate-tokens',
+      payload: {
+        jsonFiles: jsonContents,
+      }
+    }
+  }, '*');
+});
+
+function proceedWithGeneration() {
+  const jsonContents = (window as { jsonContents?: string[] }).jsonContents;
+  if (!jsonContents || jsonContents.length === 0) return;
+
   // Get selected component IDs
   const checkboxes = componentList.querySelectorAll('input[type="checkbox"]:checked');
   const selectedIds = Array.from(checkboxes).map(cb => (cb as HTMLInputElement).dataset.id);
@@ -152,7 +187,7 @@ generateBtn.addEventListener('click', () => {
     pluginMessage: {
       type: 'generate',
       payload: {
-        jsonFiles: jsonContents,  // Now sending array of JSON strings
+        jsonFiles: jsonContents,
         selectedIds,
       }
     }
@@ -160,6 +195,38 @@ generateBtn.addEventListener('click', () => {
 
   generateBtn.textContent = 'Generating...';
   generateBtn.disabled = true;
+}
+
+function showTokenDialog(result: TokenValidationResult) {
+  dialogFoundCount.textContent = String(result.found.length);
+  dialogMissingCount.textContent = String(result.missing.length);
+
+  dialogMissingList.innerHTML = result.missing.map(m => `
+    <div class="missing-item">
+      <div class="missing-token">${m.token}</div>
+      ${m.suggestion ? `<div class="missing-suggestion">Did you mean: ${m.suggestion}?</div>` : ''}
+    </div>
+  `).join('');
+
+  tokenDialog.style.display = 'flex';
+  tokenDialog.classList.remove('hidden');
+}
+
+function hideTokenDialog() {
+  tokenDialog.style.display = 'none';
+  tokenDialog.classList.add('hidden');
+}
+
+dialogCancel.addEventListener('click', () => {
+  hideTokenDialog();
+  pendingGeneration = false;
+  generateBtn.textContent = 'Generate Components';
+  generateBtn.disabled = false;
+});
+
+dialogProceed.addEventListener('click', () => {
+  hideTokenDialog();
+  proceedWithGeneration();
 });
 
 // Handle messages from main
@@ -167,9 +234,34 @@ window.onmessage = (event) => {
   const msg = event.data.pluginMessage;
   if (!msg) return;
 
+  if (msg.type === 'token-validation-result') {
+    const result = msg.payload as TokenValidationResult;
+
+    if (result.error) {
+      // Parse error
+      generateBtn.textContent = 'Generate Components';
+      generateBtn.disabled = false;
+      pendingGeneration = false;
+      tokenStatus.innerHTML = `<span class="status error">✗ ${result.error}</span>`;
+      return;
+    }
+
+    // Update token status display
+    if (result.missing.length === 0) {
+      // All tokens found - proceed directly
+      tokenStatus.innerHTML = `<span class="status success">✓ All ${result.total} tokens found</span>`;
+      proceedWithGeneration();
+    } else {
+      // Some tokens missing - show dialog
+      tokenStatus.innerHTML = `<span class="status warning">⚠ ${result.missing.length} of ${result.total} tokens missing</span>`;
+      showTokenDialog(result);
+    }
+  }
+
   if (msg.type === 'generation-complete') {
     generateBtn.textContent = 'Generate Components';
     generateBtn.disabled = false;
+    pendingGeneration = false;
   }
 
   if (msg.type === 'token-warnings') {

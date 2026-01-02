@@ -1,5 +1,5 @@
 // src/core/parser.ts
-import type { Schema, ValidationResult, ValidationError, ComponentDefinition, ComponentSetDefinition, ChildNode } from '../types/schema';
+import type { Schema, ValidationResult, ValidationError, ComponentDefinition, ComponentSetDefinition, ChildNode, LayoutProps, StyleProps, RectangleNode, Organization } from '../types/schema';
 
 export interface ParseResult extends ValidationResult {
   schema?: Schema;
@@ -499,6 +499,23 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
     warnings.push(...styleErrors.warnings);
   }
 
+  // Validate imageUrl for frame and rectangle nodes
+  if (n.nodeType === 'frame' || n.nodeType === 'rectangle') {
+    if (n.imageUrl !== undefined) {
+      if (typeof n.imageUrl !== 'string') {
+        errors.push({ path: `${path}.imageUrl`, message: 'imageUrl must be a string' });
+      } else if (!n.imageUrl.startsWith('http://') && !n.imageUrl.startsWith('https://')) {
+        warnings.push({ path: `${path}.imageUrl`, message: 'imageUrl should be a valid HTTP(S) URL' });
+      }
+    }
+    if (n.imageScaleMode !== undefined) {
+      const validScaleModes = ['FILL', 'FIT', 'CROP', 'TILE'];
+      if (!validScaleModes.includes(n.imageScaleMode as string)) {
+        errors.push({ path: `${path}.imageScaleMode`, message: `imageScaleMode must be one of: ${validScaleModes.join(', ')}` });
+      }
+    }
+  }
+
   // Recursive children validation for frames
   if (n.nodeType === 'frame' && n.children) {
     if (!Array.isArray(n.children)) {
@@ -577,4 +594,101 @@ function validateOrganization(org: unknown, path: string): { errors: ValidationE
   }
 
   return { errors, warnings };
+}
+
+// ============ Token Extraction ============
+
+export interface TokenReference {
+  token: string;
+  type: 'variable' | 'textStyle' | 'effectStyle';
+  path: string;  // Where in schema this token is referenced
+}
+
+/**
+ * Extract all token references from a parsed schema.
+ * Returns a list of unique tokens with their types and locations.
+ */
+export function extractTokenReferences(schema: Schema): TokenReference[] {
+  const refs: TokenReference[] = [];
+  const seen = new Set<string>();
+
+  function addRef(token: string | undefined, type: TokenReference['type'], path: string) {
+    if (!token) return;
+    const key = `${type}:${token}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      refs.push({ token, type, path });
+    }
+  }
+
+  function extractFromLayout(layout: LayoutProps | undefined, path: string) {
+    if (!layout) return;
+    addRef(layout.paddingToken, 'variable', `${path}.paddingToken`);
+    addRef(layout.paddingTopToken, 'variable', `${path}.paddingTopToken`);
+    addRef(layout.paddingRightToken, 'variable', `${path}.paddingRightToken`);
+    addRef(layout.paddingBottomToken, 'variable', `${path}.paddingBottomToken`);
+    addRef(layout.paddingLeftToken, 'variable', `${path}.paddingLeftToken`);
+    addRef(layout.gapToken, 'variable', `${path}.gapToken`);
+  }
+
+  function extractFromStyle(obj: StyleProps | undefined, path: string) {
+    if (!obj) return;
+    addRef(obj.fillToken, 'variable', `${path}.fillToken`);
+    addRef(obj.strokeToken, 'variable', `${path}.strokeToken`);
+    addRef(obj.radiusToken, 'variable', `${path}.radiusToken`);
+    addRef(obj.shadowToken, 'effectStyle', `${path}.shadowToken`);
+    addRef(obj.opacityToken, 'variable', `${path}.opacityToken`);
+    addRef(obj.fillOpacityToken, 'variable', `${path}.fillOpacityToken`);
+  }
+
+  function extractFromChild(child: ChildNode, path: string) {
+    if (child.nodeType === 'frame') {
+      extractFromLayout(child.layout, `${path}.layout`);
+      addRef(child.fillToken, 'variable', `${path}.fillToken`);
+      addRef(child.strokeToken, 'variable', `${path}.strokeToken`);
+      addRef(child.radiusToken, 'variable', `${path}.radiusToken`);
+      addRef(child.shadowToken, 'effectStyle', `${path}.shadowToken`);
+      child.children?.forEach((c, i) => extractFromChild(c, `${path}.children[${i}]`));
+    } else if (child.nodeType === 'text') {
+      addRef(child.textStyleToken, 'textStyle', `${path}.textStyleToken`);
+      addRef(child.fillToken, 'variable', `${path}.fillToken`);
+      addRef(child.opacityToken, 'variable', `${path}.opacityToken`);
+      addRef(child.fillOpacityToken, 'variable', `${path}.fillOpacityToken`);
+    } else if (child.nodeType === 'rectangle' || child.nodeType === 'ellipse') {
+      addRef(child.fillToken, 'variable', `${path}.fillToken`);
+      addRef(child.strokeToken, 'variable', `${path}.strokeToken`);
+      if (child.nodeType === 'rectangle') {
+        addRef((child as RectangleNode).radiusToken, 'variable', `${path}.radiusToken`);
+      }
+      addRef(child.opacityToken, 'variable', `${path}.opacityToken`);
+      addRef(child.fillOpacityToken, 'variable', `${path}.fillOpacityToken`);
+    }
+    // instance nodes don't have direct token references
+  }
+
+  // Extract from components
+  schema.components?.forEach((comp, i) => {
+    const path = `components[${i}]`;
+    extractFromLayout(comp.layout, `${path}.layout`);
+    extractFromStyle(comp, path);
+    comp.children?.forEach((child, j) => extractFromChild(child, `${path}.children[${j}]`));
+  });
+
+  // Extract from componentSets
+  schema.componentSets?.forEach((set, i) => {
+    const path = `componentSets[${i}]`;
+    extractFromLayout(set.base.layout, `${path}.base.layout`);
+    extractFromStyle(set.base, `${path}.base`);
+    set.base.children?.forEach((child, j) => extractFromChild(child, `${path}.base.children[${j}]`));
+
+    set.variants.forEach((variant, j) => {
+      const variantPath = `${path}.variants[${j}]`;
+      extractFromStyle(variant, variantPath);
+      if (variant.layout) {
+        extractFromLayout(variant.layout as LayoutProps, `${variantPath}.layout`);
+      }
+    });
+  });
+
+  return refs;
 }
