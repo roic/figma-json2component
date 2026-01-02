@@ -487,8 +487,14 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
 
   // Instance-specific validation
   if (n.nodeType === 'instance') {
-    if (!n.ref || typeof n.ref !== 'string') {
-      errors.push({ path, message: "Instance missing required field 'ref'" });
+    const hasRef = n.ref && typeof n.ref === 'string';
+    const hasComponentKey = n.componentKey && typeof n.componentKey === 'string';
+
+    if (!hasRef && !hasComponentKey) {
+      errors.push({ path, message: "Instance requires either 'ref' (local) or 'componentKey' (library)" });
+    }
+    if (hasRef && hasComponentKey) {
+      errors.push({ path, message: "Instance cannot have both 'ref' and 'componentKey'" });
     }
   }
 

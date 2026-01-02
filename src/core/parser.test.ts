@@ -195,7 +195,7 @@ describe('parseSchema child nodes', () => {
     expect(result.errors.some(e => e.message.includes("'id'"))).toBe(true);
   });
 
-  it('returns error for instance nodes without ref', () => {
+  it('returns error for instance nodes without ref or componentKey', () => {
     const json = JSON.stringify({
       components: [{
         id: 'card',
@@ -212,7 +212,7 @@ describe('parseSchema child nodes', () => {
 
     const result = parseSchema(json);
     expect(result.valid).toBe(false);
-    expect(result.errors.some(e => e.message.includes("'ref'"))).toBe(true);
+    expect(result.errors.some(e => e.message.includes("'ref'") && e.message.includes("'componentKey'"))).toBe(true);
   });
 
   it('validates frame nodes with nested children', () => {
@@ -519,6 +519,64 @@ describe('parseSchema layout wrap and padding tokens', () => {
     const result = parseSchema(json);
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
+  });
+});
+
+describe('parseSchema instance componentKey validation', () => {
+  it('validates instance with componentKey (no ref required)', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'instance',
+          name: 'SearchIcon',
+          componentKey: 'abc123def456'
+        }]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+  });
+
+  it('returns error when instance has neither ref nor componentKey', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'instance',
+          name: 'Icon'
+        }]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('ref') && e.message.includes('componentKey'))).toBe(true);
+  });
+
+  it('returns error when instance has both ref and componentKey', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'instance',
+          name: 'Icon',
+          ref: 'button',
+          componentKey: 'abc123'
+        }]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('both'))).toBe(true);
   });
 });
 
