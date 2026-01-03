@@ -449,7 +449,7 @@ async function createOrUpdateComponent(
   if (def.description) comp.description = def.description;
 
   // Apply layout
-  applyLayout(comp, def.layout, context);
+  await applyLayout(comp, def.layout, context);
 
   // Apply styles
   await applyStyles(comp, def, context);
@@ -498,11 +498,11 @@ async function createOrUpdateComponentSet(
         existingVariant.children.forEach(c => c.remove());
 
         // Apply base layout first
-        applyLayout(existingVariant, def.base.layout, context);
+        await applyLayout(existingVariant, def.base.layout, context);
 
         // Apply variant layout overrides (if any)
         if (variant.layout) {
-          applyLayout(existingVariant, variant.layout as LayoutProps, context);
+          await applyLayout(existingVariant, variant.layout as LayoutProps, context);
         }
 
         // Apply merged styles
@@ -521,9 +521,9 @@ async function createOrUpdateComponentSet(
         const newVariant = figma.createComponent();
         newVariant.name = variantName;
 
-        applyLayout(newVariant, def.base.layout, context);
+        await applyLayout(newVariant, def.base.layout, context);
         if (variant.layout) {
-          applyLayout(newVariant, variant.layout as LayoutProps, context);
+          await applyLayout(newVariant, variant.layout as LayoutProps, context);
         }
 
         const mergedStyles: StyleProps = { ...def.base, ...variant };
@@ -577,9 +577,9 @@ async function createOrUpdateComponentSet(
     const comp = figma.createComponent();
     comp.name = variantName;
 
-    applyLayout(comp, def.base.layout, context);
+    await applyLayout(comp, def.base.layout, context);
     if (variant.layout) {
-      applyLayout(comp, variant.layout as LayoutProps, context);
+      await applyLayout(comp, variant.layout as LayoutProps, context);
     }
 
     const mergedStyles: StyleProps = { ...def.base, ...variant };
@@ -636,7 +636,7 @@ async function createFrameNode(
   // Store schema node ID for tracking
   frame.setPluginData(PLUGIN_DATA_NODE_ID, def.id);
 
-  if (def.layout) applyLayout(frame, def.layout, context);
+  if (def.layout) await applyLayout(frame, def.layout, context);
   await applyStyles(frame, def, context);
 
   // Apply image fill if specified
@@ -1007,7 +1007,34 @@ async function createInstanceNode(
   return instance;
 }
 
-function applyLayout(node: FrameNode | ComponentNode, layout: LayoutProps, context: GenerationContext): void {
+async function applyPaddingWithToken(
+  node: FrameNode | ComponentNode,
+  paddingField: 'paddingTop' | 'paddingRight' | 'paddingBottom' | 'paddingLeft',
+  tokenValue: string | undefined,
+  rawValue: number | undefined,
+  context: GenerationContext
+): Promise<void> {
+  if (tokenValue) {
+    const result = resolveVariable(tokenValue, context.variableMap);
+    if (result.value) {
+      const typeError = validateVariableType(result.value, 'FLOAT', tokenValue, `${paddingField}Token`);
+      if (typeError) {
+        context.warnings.push(typeError);
+      } else {
+        node.setBoundVariable(paddingField, result.value);
+        return;
+      }
+    } else {
+      context.warnings.push(formatResolutionError(tokenValue, result, 'variable'));
+    }
+  }
+
+  if (typeof rawValue === 'number') {
+    node[paddingField] = rawValue;
+  }
+}
+
+async function applyLayout(node: FrameNode | ComponentNode, layout: LayoutProps, context: GenerationContext): Promise<void> {
   // Enable auto-layout
   node.layoutMode = layout.direction === 'vertical' ? 'VERTICAL' : 'HORIZONTAL';
 
@@ -1035,69 +1062,10 @@ function applyLayout(node: FrameNode | ComponentNode, layout: LayoutProps, conte
   }
 
   // Individual padding values - token takes priority over raw value
-  if (layout.paddingTopToken) {
-    const result = resolveVariable(layout.paddingTopToken, context.variableMap);
-    if (result.value) {
-      const typeError = validateVariableType(result.value, 'FLOAT', layout.paddingTopToken, 'paddingTopToken');
-      if (typeError) {
-        context.warnings.push(typeError);
-      } else {
-        node.setBoundVariable('paddingTop', result.value);
-      }
-    } else {
-      context.warnings.push(formatResolutionError(layout.paddingTopToken, result, 'variable'));
-    }
-  } else if (layout.paddingTop !== undefined) {
-    node.paddingTop = layout.paddingTop;
-  }
-
-  if (layout.paddingRightToken) {
-    const result = resolveVariable(layout.paddingRightToken, context.variableMap);
-    if (result.value) {
-      const typeError = validateVariableType(result.value, 'FLOAT', layout.paddingRightToken, 'paddingRightToken');
-      if (typeError) {
-        context.warnings.push(typeError);
-      } else {
-        node.setBoundVariable('paddingRight', result.value);
-      }
-    } else {
-      context.warnings.push(formatResolutionError(layout.paddingRightToken, result, 'variable'));
-    }
-  } else if (layout.paddingRight !== undefined) {
-    node.paddingRight = layout.paddingRight;
-  }
-
-  if (layout.paddingBottomToken) {
-    const result = resolveVariable(layout.paddingBottomToken, context.variableMap);
-    if (result.value) {
-      const typeError = validateVariableType(result.value, 'FLOAT', layout.paddingBottomToken, 'paddingBottomToken');
-      if (typeError) {
-        context.warnings.push(typeError);
-      } else {
-        node.setBoundVariable('paddingBottom', result.value);
-      }
-    } else {
-      context.warnings.push(formatResolutionError(layout.paddingBottomToken, result, 'variable'));
-    }
-  } else if (layout.paddingBottom !== undefined) {
-    node.paddingBottom = layout.paddingBottom;
-  }
-
-  if (layout.paddingLeftToken) {
-    const result = resolveVariable(layout.paddingLeftToken, context.variableMap);
-    if (result.value) {
-      const typeError = validateVariableType(result.value, 'FLOAT', layout.paddingLeftToken, 'paddingLeftToken');
-      if (typeError) {
-        context.warnings.push(typeError);
-      } else {
-        node.setBoundVariable('paddingLeft', result.value);
-      }
-    } else {
-      context.warnings.push(formatResolutionError(layout.paddingLeftToken, result, 'variable'));
-    }
-  } else if (layout.paddingLeft !== undefined) {
-    node.paddingLeft = layout.paddingLeft;
-  }
+  await applyPaddingWithToken(node, 'paddingTop', layout.paddingTopToken, layout.paddingTop, context);
+  await applyPaddingWithToken(node, 'paddingRight', layout.paddingRightToken, layout.paddingRight, context);
+  await applyPaddingWithToken(node, 'paddingBottom', layout.paddingBottomToken, layout.paddingBottom, context);
+  await applyPaddingWithToken(node, 'paddingLeft', layout.paddingLeftToken, layout.paddingLeft, context);
 
   // Gap - token takes priority over raw value
   if (layout.gapToken) {
