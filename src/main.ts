@@ -106,7 +106,15 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
       : { valid: false, errors: [{ path: '', message: 'No JSON provided' }], warnings: [], registries: [] };
 
     if (!parseResult.valid || !parseResult.schema) {
-      figma.notify(`Parse error: ${parseResult.errors[0]?.message || 'Unknown error'}`, { error: true });
+      const errorCount = parseResult.errors.length;
+      const firstError = parseResult.errors[0]?.message || 'Unknown error';
+      const suffix = errorCount > 1 ? ` (+${errorCount - 1} more errors)` : '';
+
+      figma.notify(`Parse error: ${firstError}${suffix}`, { error: true });
+
+      // Also log all errors to console for debugging
+      console.error('Parse errors:', parseResult.errors);
+
       figma.ui.postMessage({ type: 'generation-complete' });
       return;
     }
