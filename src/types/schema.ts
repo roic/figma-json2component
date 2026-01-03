@@ -180,13 +180,11 @@ export interface Schema {
 
 // ============ Validation Result ============
 
-export interface ValidationError {
-  path: string;
-  message: string;
-}
+// Re-export ValidationError from errors.ts for backward compatibility
+export type { ValidationError } from '../core/errors';
 
 export interface ValidationResult {
   valid: boolean;
-  errors: ValidationError[];
-  warnings: ValidationError[];
+  errors: import('../core/errors').ValidationError[];
+  warnings: import('../core/errors').ValidationError[];
 }

@@ -1,7 +1,8 @@
 // src/core/parser.ts
-import type { Schema, ValidationResult, ValidationError, ComponentDefinition, ComponentSetDefinition, ChildNode, LayoutProps, StyleProps, RectangleNode, Organization } from '../types/schema';
+import type { Schema, ValidationResult, ComponentDefinition, ComponentSetDefinition, ChildNode, LayoutProps, StyleProps, RectangleNode, Organization } from '../types/schema';
 import { parseIconRef, isIconRegistry, IconRegistry } from '../types/iconRegistry';
 import { isRecord, isStringArray, isNumberArray, isValidNodeType, isString, isBoolean } from './typeGuards';
+import { createError, ValidationError } from './errors';
 
 export interface ParseResult extends ValidationResult {
   schema?: Schema;
@@ -16,7 +17,7 @@ export function parseSchemas(jsonStrings: string[]): ParseResult {
   if (jsonStrings.length === 0) {
     return {
       valid: false,
-      errors: [{ path: '', message: 'No schemas provided' }],
+      errors: [createError('EMPTY_SCHEMA', '', 'No schemas provided')],
       warnings: [],
       registries: [],
     };
@@ -34,10 +35,11 @@ export function parseSchemas(jsonStrings: string[]): ParseResult {
     try {
       parsed = JSON.parse(jsonString);
     } catch (e) {
-      allErrors.push({
-        path: `[file ${index + 1}]`,
-        message: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`,
-      });
+      allErrors.push(createError(
+        'INVALID_JSON',
+        `[file ${index + 1}]`,
+        `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`
+      ));
       return;
     }
 
@@ -79,10 +81,11 @@ export function parseSchemas(jsonStrings: string[]): ParseResult {
   parsedSchemas.forEach((schema, fileIndex) => {
     schema.components?.forEach(c => {
       if (idToFileIndex.has(c.id)) {
-        allErrors.push({
-          path: '',
-          message: `Duplicate id '${c.id}' found in multiple files (first in file ${idToFileIndex.get(c.id)! + 1}, duplicate in file ${fileIndex + 1})`,
-        });
+        allErrors.push(createError(
+          'DUPLICATE_ID',
+          '',
+          `Duplicate id '${c.id}' found in multiple files (first in file ${idToFileIndex.get(c.id)! + 1}, duplicate in file ${fileIndex + 1})`
+        ));
       } else {
         idToFileIndex.set(c.id, fileIndex);
       }
@@ -90,10 +93,11 @@ export function parseSchemas(jsonStrings: string[]): ParseResult {
 
     schema.componentSets?.forEach(s => {
       if (idToFileIndex.has(s.id)) {
-        allErrors.push({
-          path: '',
-          message: `Duplicate id '${s.id}' found in multiple files (first in file ${idToFileIndex.get(s.id)! + 1}, duplicate in file ${fileIndex + 1})`,
-        });
+        allErrors.push(createError(
+          'DUPLICATE_ID',
+          '',
+          `Duplicate id '${s.id}' found in multiple files (first in file ${idToFileIndex.get(s.id)! + 1}, duplicate in file ${fileIndex + 1})`
+        ));
       } else {
         idToFileIndex.set(s.id, fileIndex);
       }
@@ -163,7 +167,7 @@ export function parseSchema(jsonString: string): ParseResult {
     const message = e instanceof Error ? e.message : 'Invalid JSON';
     return {
       valid: false,
-      errors: [{ path: '', message: `JSON parse error: ${message}` }],
+      errors: [createError('INVALID_JSON', '', `JSON parse error: ${message}`)],
       warnings: [],
       registries: [],
     };
@@ -173,7 +177,7 @@ export function parseSchema(jsonString: string): ParseResult {
   if (!isRecord(raw)) {
     return {
       valid: false,
-      errors: [{ path: '', message: 'Schema must be an object' }],
+      errors: [createError('INVALID_TYPE', '', 'Schema must be an object')],
       warnings: [],
       registries: [],
     };
@@ -185,7 +189,7 @@ export function parseSchema(jsonString: string): ParseResult {
   // Validate organization
   if ('organization' in schema) {
     if (typeof schema.organization !== 'object' || schema.organization === null) {
-      errors.push({ path: 'organization', message: 'organization must be an object' });
+      errors.push(createError('INVALID_TYPE', 'organization', 'organization must be an object'));
     } else {
       const orgErrors = validateOrganization(schema.organization, 'organization');
       errors.push(...orgErrors.errors);
@@ -199,7 +203,7 @@ export function parseSchema(jsonString: string): ParseResult {
   // Validate components
   if ('components' in schema) {
     if (!Array.isArray(schema.components)) {
-      errors.push({ path: 'components', message: 'components must be an array' });
+      errors.push(createError('INVALID_TYPE', 'components', 'components must be an array'));
     } else {
       result.components = [];
       schema.components.forEach((comp, i) => {
@@ -216,7 +220,7 @@ export function parseSchema(jsonString: string): ParseResult {
   // Validate componentSets
   if ('componentSets' in schema) {
     if (!Array.isArray(schema.componentSets)) {
-      errors.push({ path: 'componentSets', message: 'componentSets must be an array' });
+      errors.push(createError('INVALID_TYPE', 'componentSets', 'componentSets must be an array'));
     } else {
       result.componentSets = [];
       schema.componentSets.forEach((set, i) => {
@@ -238,14 +242,14 @@ export function parseSchema(jsonString: string): ParseResult {
   const seen = new Set<string>();
   allIds.forEach(id => {
     if (seen.has(id)) {
-      errors.push({ path: '', message: `Duplicate id '${id}' found` });
+      errors.push(createError('DUPLICATE_ID', '', `Duplicate id '${id}' found`));
     }
     seen.add(id);
   });
 
   // Warn if schema is empty
   if (allIds.length === 0) {
-    warnings.push({ path: '', message: 'Schema contains no components or componentSets' });
+    warnings.push(createError('EMPTY_SCHEMA', '', 'Schema contains no components or componentSets'));
   }
 
   return {
@@ -262,7 +266,7 @@ function validateComponent(comp: unknown, path: string): { errors: ValidationErr
   const warnings: ValidationError[] = [];
 
   if (!isRecord(comp)) {
-    errors.push({ path, message: 'Component must be an object' });
+    errors.push(createError('INVALID_TYPE', path, 'Component must be an object'));
     return { errors, warnings };
   }
 
@@ -270,13 +274,13 @@ function validateComponent(comp: unknown, path: string): { errors: ValidationErr
 
   // Required fields
   if (!isString(c.id)) {
-    errors.push({ path, message: "Missing required field 'id'" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'id'"));
   }
   if (!isString(c.name)) {
-    errors.push({ path, message: "Missing required field 'name'" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'name'"));
   }
   if (!isRecord(c.layout)) {
-    errors.push({ path, message: "Missing required field 'layout'" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'layout'"));
   } else {
     const layoutErrors = validateLayout(c.layout, `${path}.layout`);
     errors.push(...layoutErrors.errors);
@@ -291,7 +295,7 @@ function validateComponent(comp: unknown, path: string): { errors: ValidationErr
   // Validate children if present
   if (c.children) {
     if (!Array.isArray(c.children)) {
-      errors.push({ path: `${path}.children`, message: 'children must be an array' });
+      errors.push(createError('INVALID_TYPE', `${path}.children`, 'children must be an array'));
     } else {
       c.children.forEach((child, i) => {
         const childErrors = validateChildNode(child, `${path}.children[${i}]`);
@@ -309,7 +313,7 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
   const warnings: ValidationError[] = [];
 
   if (!isRecord(set)) {
-    errors.push({ path, message: 'ComponentSet must be an object' });
+    errors.push(createError('INVALID_TYPE', path, 'ComponentSet must be an object'));
     return { errors, warnings };
   }
 
@@ -317,16 +321,16 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
 
   // Required fields
   if (!isString(s.id)) {
-    errors.push({ path, message: "Missing required field 'id'" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'id'"));
   }
   if (!isString(s.name)) {
-    errors.push({ path, message: "Missing required field 'name'" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'name'"));
   }
   if (!isStringArray(s.variantProps)) {
-    errors.push({ path, message: "Missing required field 'variantProps' (array)" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'variantProps' (array)"));
   }
   if (!isRecord(s.base)) {
-    errors.push({ path, message: "Missing required field 'base'" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'base'"));
   } else {
     const base = s.base;
     const baseErrors = validateLayout(base.layout, `${path}.base.layout`);
@@ -348,13 +352,13 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
     }
   }
   if (!Array.isArray(s.variants)) {
-    errors.push({ path, message: "Missing required field 'variants' (array)" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'variants' (array)"));
   } else if (s.variants.length === 0) {
-    errors.push({ path: `${path}.variants`, message: 'componentSet must have at least one variant' });
+    errors.push(createError('INVALID_VALUE', `${path}.variants`, 'componentSet must have at least one variant'));
   } else {
     s.variants.forEach((v, i) => {
       if (!isRecord(v) || !('props' in v)) {
-        errors.push({ path: `${path}.variants[${i}]`, message: "Variant missing 'props'" });
+        errors.push(createError('MISSING_REQUIRED', `${path}.variants[${i}]`, "Variant missing 'props'"));
       } else {
         const variant = v;
 
@@ -367,20 +371,22 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
           // Check all expected keys are present
           expectedKeys.forEach(key => {
             if (!(key in variantProps)) {
-              errors.push({
-                path: `${path}.variants[${i}].props`,
-                message: `Missing required variant property '${key}'`
-              });
+              errors.push(createError(
+                'MISSING_REQUIRED',
+                `${path}.variants[${i}].props`,
+                `Missing required variant property '${key}'`
+              ));
             }
           });
 
           // Warn about extra keys
           variantKeys.forEach(key => {
             if (!expectedKeys.includes(key)) {
-              warnings.push({
-                path: `${path}.variants[${i}].props`,
-                message: `Unexpected variant property '${key}' (not in variantProps)`
-              });
+              warnings.push(createError(
+                'INVALID_VALUE',
+                `${path}.variants[${i}].props`,
+                `Unexpected variant property '${key}' (not in variantProps)`
+              ));
             }
           });
         }
@@ -401,7 +407,7 @@ function validateLayout(layout: unknown, path: string): { errors: ValidationErro
   const warnings: ValidationError[] = [];
 
   if (!isRecord(layout)) {
-    errors.push({ path, message: 'Layout must be an object' });
+    errors.push(createError('INVALID_TYPE', path, 'Layout must be an object'));
     return { errors, warnings };
   }
 
@@ -409,27 +415,27 @@ function validateLayout(layout: unknown, path: string): { errors: ValidationErro
 
   // Check for token/value conflicts
   if (l.padding !== undefined && l.paddingToken !== undefined) {
-    errors.push({ path, message: "Cannot specify both 'padding' and 'paddingToken'" });
+    errors.push(createError('MUTUALLY_EXCLUSIVE', path, "Cannot specify both 'padding' and 'paddingToken'"));
   }
   if (l.paddingTop !== undefined && l.paddingTopToken !== undefined) {
-    errors.push({ path, message: "Cannot specify both 'paddingTop' and 'paddingTopToken'" });
+    errors.push(createError('MUTUALLY_EXCLUSIVE', path, "Cannot specify both 'paddingTop' and 'paddingTopToken'"));
   }
   if (l.paddingRight !== undefined && l.paddingRightToken !== undefined) {
-    errors.push({ path, message: "Cannot specify both 'paddingRight' and 'paddingRightToken'" });
+    errors.push(createError('MUTUALLY_EXCLUSIVE', path, "Cannot specify both 'paddingRight' and 'paddingRightToken'"));
   }
   if (l.paddingBottom !== undefined && l.paddingBottomToken !== undefined) {
-    errors.push({ path, message: "Cannot specify both 'paddingBottom' and 'paddingBottomToken'" });
+    errors.push(createError('MUTUALLY_EXCLUSIVE', path, "Cannot specify both 'paddingBottom' and 'paddingBottomToken'"));
   }
   if (l.paddingLeft !== undefined && l.paddingLeftToken !== undefined) {
-    errors.push({ path, message: "Cannot specify both 'paddingLeft' and 'paddingLeftToken'" });
+    errors.push(createError('MUTUALLY_EXCLUSIVE', path, "Cannot specify both 'paddingLeft' and 'paddingLeftToken'"));
   }
   if (l.gap !== undefined && l.gapToken !== undefined) {
-    errors.push({ path, message: "Cannot specify both 'gap' and 'gapToken'" });
+    errors.push(createError('MUTUALLY_EXCLUSIVE', path, "Cannot specify both 'gap' and 'gapToken'"));
   }
 
   // Validate wrap is boolean
   if (l.wrap !== undefined && !isBoolean(l.wrap)) {
-    errors.push({ path, message: "wrap must be a boolean" });
+    errors.push(createError('INVALID_TYPE', path, "wrap must be a boolean"));
   }
 
   return { errors, warnings };
@@ -447,21 +453,21 @@ function validateStyleProps(props: unknown, path: string): { errors: ValidationE
 
   // Check for token/value conflicts
   if (p.opacity !== undefined && p.opacityToken !== undefined) {
-    errors.push({ path, message: "Cannot specify both 'opacity' and 'opacityToken'" });
+    errors.push(createError('MUTUALLY_EXCLUSIVE', path, "Cannot specify both 'opacity' and 'opacityToken'"));
   }
   if (p.fillOpacity !== undefined && p.fillOpacityToken !== undefined) {
-    errors.push({ path, message: "Cannot specify both 'fillOpacity' and 'fillOpacityToken'" });
+    errors.push(createError('MUTUALLY_EXCLUSIVE', path, "Cannot specify both 'fillOpacity' and 'fillOpacityToken'"));
   }
 
   // Validate opacity ranges (0-1)
   if (p.opacity !== undefined && typeof p.opacity === 'number') {
     if (p.opacity < 0 || p.opacity > 1) {
-      errors.push({ path, message: "opacity must be between 0 and 1" });
+      errors.push(createError('INVALID_VALUE', path, "opacity must be between 0 and 1"));
     }
   }
   if (p.fillOpacity !== undefined && typeof p.fillOpacity === 'number') {
     if (p.fillOpacity < 0 || p.fillOpacity > 1) {
-      errors.push({ path, message: "fillOpacity must be between 0 and 1" });
+      errors.push(createError('INVALID_VALUE', path, "fillOpacity must be between 0 and 1"));
     }
   }
 
@@ -469,9 +475,9 @@ function validateStyleProps(props: unknown, path: string): { errors: ValidationE
   if (p.strokeDash !== undefined) {
     if (!isNumberArray(p.strokeDash)) {
       if (!Array.isArray(p.strokeDash)) {
-        errors.push({ path, message: "strokeDash must be an array" });
+        errors.push(createError('INVALID_TYPE', path, "strokeDash must be an array"));
       } else {
-        errors.push({ path, message: "strokeDash must be an array of numbers" });
+        errors.push(createError('INVALID_TYPE', path, "strokeDash must be an array of numbers"));
       }
     }
   }
@@ -486,35 +492,35 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
   // Check nesting depth to prevent stack overflow
   const MAX_DEPTH = 50;
   if (depth > MAX_DEPTH) {
-    errors.push({ path, message: `Maximum nesting depth (${MAX_DEPTH}) exceeded` });
+    errors.push(createError('MAX_DEPTH_EXCEEDED', path, `Maximum nesting depth (${MAX_DEPTH}) exceeded`));
     return { errors, warnings };
   }
 
   if (!isRecord(node)) {
-    errors.push({ path, message: 'Node must be an object' });
+    errors.push(createError('INVALID_TYPE', path, 'Node must be an object'));
     return { errors, warnings };
   }
 
   const n = node;
 
   if (!isString(n.nodeType)) {
-    errors.push({ path, message: "Missing required field 'nodeType'" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'nodeType'"));
     return { errors, warnings };
   }
 
   if (!isValidNodeType(n.nodeType)) {
     const validTypes = ['frame', 'text', 'instance', 'rectangle', 'ellipse'];
-    errors.push({ path, message: `Invalid nodeType '${n.nodeType}'. Must be one of: ${validTypes.join(', ')}` });
+    errors.push(createError('INVALID_NODE_TYPE', path, `Invalid nodeType '${n.nodeType}'. Must be one of: ${validTypes.join(', ')}`));
     return { errors, warnings };
   }
 
   // All nodes except instance require id (instance.id is optional per schema)
   if (n.nodeType !== 'instance' && !isString(n.id)) {
-    errors.push({ path, message: "Missing required field 'id'" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'id'"));
   }
 
   if (!isString(n.name)) {
-    errors.push({ path, message: "Missing required field 'name'" });
+    errors.push(createError('MISSING_REQUIRED', path, "Missing required field 'name'"));
   }
 
   // Instance-specific validation
@@ -526,16 +532,16 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
     const refCount = [hasRef, hasComponentKey, hasIconRef].filter(Boolean).length;
 
     if (refCount === 0) {
-      errors.push({ path, message: "Instance requires 'ref', 'componentKey', or 'iconRef'" });
+      errors.push(createError('MISSING_REQUIRED', path, "Instance requires 'ref', 'componentKey', or 'iconRef'"));
     }
     if (refCount > 1) {
-      errors.push({ path, message: "Instance can only have one of 'ref', 'componentKey', or 'iconRef'" });
+      errors.push(createError('MUTUALLY_EXCLUSIVE', path, "Instance can only have one of 'ref', 'componentKey', or 'iconRef'"));
     }
 
     if (hasIconRef && isString(n.iconRef)) {
       const parsed = parseIconRef(n.iconRef);
       if (!parsed) {
-        errors.push({ path, message: "Invalid iconRef format. Expected 'library:iconName' (e.g., 'lucide:search')" });
+        errors.push(createError('INVALID_ICON_REF', path, "Invalid iconRef format. Expected 'library:iconName' (e.g., 'lucide:search')"));
       }
     }
   }
@@ -551,15 +557,15 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
   if (n.nodeType === 'frame' || n.nodeType === 'rectangle') {
     if (n.imageUrl !== undefined) {
       if (!isString(n.imageUrl)) {
-        errors.push({ path: `${path}.imageUrl`, message: 'imageUrl must be a string' });
+        errors.push(createError('INVALID_TYPE', `${path}.imageUrl`, 'imageUrl must be a string'));
       } else if (!n.imageUrl.startsWith('http://') && !n.imageUrl.startsWith('https://')) {
-        warnings.push({ path: `${path}.imageUrl`, message: 'imageUrl should be a valid HTTP(S) URL' });
+        warnings.push(createError('INVALID_VALUE', `${path}.imageUrl`, 'imageUrl should be a valid HTTP(S) URL'));
       }
     }
     if (n.imageScaleMode !== undefined) {
       const validScaleModes = ['FILL', 'FIT', 'CROP', 'TILE'];
       if (!isString(n.imageScaleMode) || !validScaleModes.includes(n.imageScaleMode)) {
-        errors.push({ path: `${path}.imageScaleMode`, message: `imageScaleMode must be one of: ${validScaleModes.join(', ')}` });
+        errors.push(createError('INVALID_VALUE', `${path}.imageScaleMode`, `imageScaleMode must be one of: ${validScaleModes.join(', ')}`));
       }
     }
   }
@@ -567,7 +573,7 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
   // Recursive children validation for frames
   if (n.nodeType === 'frame' && n.children) {
     if (!Array.isArray(n.children)) {
-      errors.push({ path: `${path}.children`, message: 'children must be an array' });
+      errors.push(createError('INVALID_TYPE', `${path}.children`, 'children must be an array'));
     } else {
       (n.children as unknown[]).forEach((child, i) => {
         const childErrors = validateChildNode(child, `${path}.children[${i}]`, depth + 1);
@@ -595,7 +601,7 @@ function validateOrganization(org: unknown, path: string): { errors: ValidationE
     const validGroupBy = ['category', 'tags', 'none'];
     if (!isString(o.groupBy) || !validGroupBy.includes(o.groupBy)) {
       const validOptions = validGroupBy.join(', ');
-      errors.push({ path: `${path}.groupBy`, message: `groupBy must be one of: ${validOptions}` });
+      errors.push(createError('INVALID_VALUE', `${path}.groupBy`, `groupBy must be one of: ${validOptions}`));
     }
   }
 
@@ -604,21 +610,21 @@ function validateOrganization(org: unknown, path: string): { errors: ValidationE
     const validLayout = ['frames', 'pages', 'grid'];
     if (!isString(o.layout) || !validLayout.includes(o.layout)) {
       const validOptions = validLayout.join(', ');
-      errors.push({ path: `${path}.layout`, message: `layout must be one of: ${validOptions}` });
+      errors.push(createError('INVALID_VALUE', `${path}.layout`, `layout must be one of: ${validOptions}`));
     }
   }
 
   // Validate gridColumns
   if (o.gridColumns !== undefined) {
     if (typeof o.gridColumns !== 'number' || o.gridColumns < 1) {
-      errors.push({ path: `${path}.gridColumns`, message: 'gridColumns must be a positive number' });
+      errors.push(createError('INVALID_VALUE', `${path}.gridColumns`, 'gridColumns must be a positive number'));
     }
   }
 
   // Validate spacing
   if (o.spacing !== undefined) {
     if (typeof o.spacing !== 'number' || o.spacing < 0) {
-      errors.push({ path: `${path}.spacing`, message: 'spacing must be a non-negative number' });
+      errors.push(createError('INVALID_VALUE', `${path}.spacing`, 'spacing must be a non-negative number'));
     }
   }
 
@@ -627,18 +633,18 @@ function validateOrganization(org: unknown, path: string): { errors: ValidationE
     const validSortBy = ['alphabetical', 'schema-order'];
     if (!isString(o.sortBy) || !validSortBy.includes(o.sortBy)) {
       const validOptions = validSortBy.join(', ');
-      errors.push({ path: `${path}.sortBy`, message: `sortBy must be one of: ${validOptions}` });
+      errors.push(createError('INVALID_VALUE', `${path}.sortBy`, `sortBy must be one of: ${validOptions}`));
     }
   }
 
   // Validate frameLabels
   if (o.frameLabels !== undefined && !isBoolean(o.frameLabels)) {
-    errors.push({ path: `${path}.frameLabels`, message: 'frameLabels must be a boolean' });
+    errors.push(createError('INVALID_TYPE', `${path}.frameLabels`, 'frameLabels must be a boolean'));
   }
 
   // Validate pagePrefixes
   if (o.pagePrefixes !== undefined && !isBoolean(o.pagePrefixes)) {
-    errors.push({ path: `${path}.pagePrefixes`, message: 'pagePrefixes must be a boolean' });
+    errors.push(createError('INVALID_TYPE', `${path}.pagePrefixes`, 'pagePrefixes must be a boolean'));
   }
 
   return { errors, warnings };
