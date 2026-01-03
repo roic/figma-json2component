@@ -10,6 +10,31 @@
  * - Suffix matching (color.primary.default → matches anything ending in "default")
  */
 
+/**
+ * Suffix index for O(1) partial lookups on variables.
+ * Maps normalized suffix (last segment) to array of full variable names.
+ * Only used for variables (the most common lookup).
+ */
+const suffixIndex = new Map<string, string[]>();
+
+/**
+ * Build suffix index for O(1) partial lookups on variables.
+ * Should be called after building the variableMap in buildContext.
+ *
+ * @param variableMap - The pre-indexed variable map from buildContext
+ */
+export function buildSuffixIndex(variableMap: Map<string, Variable>): void {
+  suffixIndex.clear();
+  for (const name of variableMap.keys()) {
+    const suffix = name.split(/[./]/).pop() || name;
+    const normalizedSuffix = suffix.toLowerCase();
+    if (!suffixIndex.has(normalizedSuffix)) {
+      suffixIndex.set(normalizedSuffix, []);
+    }
+    suffixIndex.get(normalizedSuffix)!.push(name);
+  }
+}
+
 export interface ResolutionResult<T> {
   value: T | null;
   triedNames: string[];
@@ -23,6 +48,8 @@ export interface ResolutionResult<T> {
 interface TokenResolutionConfig {
   /** Common prefixes to try prepending (both dot and slash variants are generated) */
   prefixBases: string[];
+  /** Whether to use the suffix index for partial lookups (only for variables) */
+  useSuffixIndex?: boolean;
 }
 
 /**
@@ -73,15 +100,35 @@ function resolveToken<T extends { name: string }>(
   const lastSegment = segments[segments.length - 1];
   if (lastSegment && segments.length > 1) {
     triedNames.push(`*/${lastSegment}`);
-    for (const [name, token] of tokenMap.entries()) {
-      const nameLower = name.toLowerCase();
-      if (nameLower.endsWith('/' + lastSegment) || nameLower.endsWith('.' + lastSegment)) {
-        return {
-          value: token,
-          triedNames,
-          availableNames,
-          suggestion: token.name,
-        };
+
+    // Use suffix index for O(1) lookup if enabled (variables only)
+    if (config.useSuffixIndex && suffixIndex.size > 0) {
+      const candidates = suffixIndex.get(lastSegment);
+      if (candidates && candidates.length > 0) {
+        // Return the first matching candidate
+        const matchedName = candidates[0];
+        const token = tokenMap.get(matchedName);
+        if (token) {
+          return {
+            value: token,
+            triedNames,
+            availableNames,
+            suggestion: token.name,
+          };
+        }
+      }
+    } else {
+      // Fallback: O(n) iteration for text/effect styles
+      for (const [name, token] of tokenMap.entries()) {
+        const nameLower = name.toLowerCase();
+        if (nameLower.endsWith('/' + lastSegment) || nameLower.endsWith('.' + lastSegment)) {
+          return {
+            value: token,
+            triedNames,
+            availableNames,
+            suggestion: token.name,
+          };
+        }
       }
     }
   }
@@ -97,9 +144,10 @@ function resolveToken<T extends { name: string }>(
   };
 }
 
-/** Prefix configuration for variable tokens */
+/** Prefix configuration for variable tokens (uses suffix index for O(1) partial lookups) */
 const VARIABLE_PREFIXES: TokenResolutionConfig = {
   prefixBases: ['semantic', 'primitives', 'core', 'tokens'],
+  useSuffixIndex: true,
 };
 
 /** Prefix configuration for text style tokens */

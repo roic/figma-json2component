@@ -2,6 +2,7 @@
 import { IconRegistryResolver } from '../iconRegistry';
 import { IconRegistry } from '../../types/iconRegistry';
 import { GenerationContext, PLUGIN_DATA_KEY } from './types';
+import { buildSuffixIndex } from '../tokenResolver';
 
 /**
  * Generate all possible lookup keys for a variable.
@@ -152,6 +153,9 @@ export async function buildContext(
       }
     }
   }
+
+  // Build suffix index for O(1) partial lookups on variables
+  buildSuffixIndex(variableMap);
 
   // Build text style index with multiple naming variants
   const textStyleMap = new Map<string, TextStyle>();
