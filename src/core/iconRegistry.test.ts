@@ -75,3 +75,57 @@ describe('IconRegistryResolver', () => {
     expect(result.error).toContain('format');
   });
 });
+
+describe('IconRegistryResolver edge cases', () => {
+  it('handles empty registry', () => {
+    const emptyRegistry: IconRegistry = {
+      type: 'icon-registry',
+      library: 'empty',
+      figmaLibraryName: 'Empty',
+      icons: {}
+    };
+
+    const resolver = new IconRegistryResolver([emptyRegistry]);
+    const result = resolver.resolve('empty:anything');
+
+    expect(result.componentKey).toBeNull();
+    expect(result.error).toContain('not found');
+  });
+
+  it('handles registry with special characters in icon names', () => {
+    const registry: IconRegistry = {
+      type: 'icon-registry',
+      library: 'test',
+      figmaLibraryName: 'Test',
+      icons: {
+        'arrow-left': 'key1',
+        'arrow_right': 'key2',
+        'arrow.up': 'key3'
+      }
+    };
+
+    const resolver = new IconRegistryResolver([registry]);
+
+    expect(resolver.resolve('test:arrow-left').componentKey).toBe('key1');
+    expect(resolver.resolve('test:arrow_right').componentKey).toBe('key2');
+    expect(resolver.resolve('test:arrow.up').componentKey).toBe('key3');
+  });
+
+  it('provides multiple suggestions for partial matches', () => {
+    const registry: IconRegistry = {
+      type: 'icon-registry',
+      library: 'test',
+      figmaLibraryName: 'Test',
+      icons: {
+        'search': 'key1',
+        'search-plus': 'key2',
+        'search-minus': 'key3'
+      }
+    };
+
+    const resolver = new IconRegistryResolver([registry]);
+    const result = resolver.resolve('test:sear');
+
+    expect(result.error).toContain('search');
+  });
+});
