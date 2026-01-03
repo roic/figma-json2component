@@ -4,6 +4,13 @@ import { parseIconRef, isIconRegistry, IconRegistry } from '../types/iconRegistr
 import { isRecord, isStringArray, isNumberArray, isValidNodeType, isString, isBoolean } from './typeGuards';
 import { createError, ValidationError } from './errors';
 
+const SCHEMA_LIMITS = {
+  MAX_DEPTH: 50,
+  MAX_COMPONENTS: 500,
+  MAX_CHILDREN_PER_NODE: 200,
+  MAX_VARIANTS: 100,
+};
+
 export interface ParseResult extends ValidationResult {
   schema?: Schema;
   registries: IconRegistry[];
@@ -234,6 +241,16 @@ export function parseSchema(jsonString: string): ParseResult {
     }
   }
 
+  // Check total component count
+  const totalComponents = (schema.components?.length || 0) + (schema.componentSets?.length || 0);
+  if (totalComponents > SCHEMA_LIMITS.MAX_COMPONENTS) {
+    errors.push(createError(
+      'MAX_COMPONENTS_EXCEEDED',
+      'schema',
+      `Schema has ${totalComponents} components, exceeding maximum of ${SCHEMA_LIMITS.MAX_COMPONENTS}`
+    ));
+  }
+
   // Check for duplicate IDs
   const allIds = [
     ...(result.components?.map(c => c.id) || []),
@@ -356,6 +373,13 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
   } else if (s.variants.length === 0) {
     errors.push(createError('INVALID_VALUE', `${path}.variants`, 'componentSet must have at least one variant'));
   } else {
+    if (s.variants.length > SCHEMA_LIMITS.MAX_VARIANTS) {
+      errors.push(createError(
+        'MAX_VARIANTS_EXCEEDED',
+        `${path}.variants`,
+        `ComponentSet has ${s.variants.length} variants, exceeding maximum of ${SCHEMA_LIMITS.MAX_VARIANTS}`
+      ));
+    }
     s.variants.forEach((v, i) => {
       if (!isRecord(v) || !('props' in v)) {
         errors.push(createError('MISSING_REQUIRED', `${path}.variants[${i}]`, "Variant missing 'props'"));
@@ -490,9 +514,8 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
   const warnings: ValidationError[] = [];
 
   // Check nesting depth to prevent stack overflow
-  const MAX_DEPTH = 50;
-  if (depth > MAX_DEPTH) {
-    errors.push(createError('MAX_DEPTH_EXCEEDED', path, `Maximum nesting depth (${MAX_DEPTH}) exceeded`));
+  if (depth > SCHEMA_LIMITS.MAX_DEPTH) {
+    errors.push(createError('MAX_DEPTH_EXCEEDED', path, `Maximum nesting depth (${SCHEMA_LIMITS.MAX_DEPTH}) exceeded`));
     return { errors, warnings };
   }
 
@@ -575,7 +598,15 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
     if (!Array.isArray(n.children)) {
       errors.push(createError('INVALID_TYPE', `${path}.children`, 'children must be an array'));
     } else {
-      (n.children as unknown[]).forEach((child, i) => {
+      const children = n.children as unknown[];
+      if (children.length > SCHEMA_LIMITS.MAX_CHILDREN_PER_NODE) {
+        errors.push(createError(
+          'MAX_CHILDREN_EXCEEDED',
+          path,
+          `Node has ${children.length} children, exceeding maximum of ${SCHEMA_LIMITS.MAX_CHILDREN_PER_NODE}`
+        ));
+      }
+      children.forEach((child, i) => {
         const childErrors = validateChildNode(child, `${path}.children[${i}]`, depth + 1);
         errors.push(...childErrors.errors);
         warnings.push(...childErrors.warnings);
