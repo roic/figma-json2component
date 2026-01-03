@@ -664,8 +664,28 @@ async function createTextNode(
   // Store schema node ID for reliable text override matching
   text.setPluginData(PLUGIN_DATA_NODE_ID, def.id);
 
-  // Load font before setting text
-  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  // Load font before setting text (with fallback chain)
+  let fontLoaded = false;
+  const fallbackFonts = [
+    { family: 'Inter', style: 'Regular' },
+    { family: 'Roboto', style: 'Regular' },
+    { family: 'Arial', style: 'Regular' },
+  ];
+
+  for (const font of fallbackFonts) {
+    try {
+      await figma.loadFontAsync(font);
+      fontLoaded = true;
+      break;
+    } catch (e) {
+      console.warn(`Failed to load font ${font.family}:`, e);
+      // Try next font
+    }
+  }
+
+  if (!fontLoaded) {
+    context.warnings.push(`Could not load any font. Text nodes may not render correctly.`);
+  }
 
   text.characters = def.text || '';
 
