@@ -4,6 +4,19 @@ import { resolveVariable, formatResolutionError, validateVariableType } from '..
 import { GenerationContext } from './types';
 
 /**
+ * Validate that a URL is a valid HTTP/HTTPS URL.
+ * Blocks potentially malicious URLs like javascript:, data:, file:, etc.
+ */
+function isValidImageUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Apply an image fill from a URL.
  */
 export async function applyImageFill(
@@ -12,6 +25,12 @@ export async function applyImageFill(
   scaleMode: 'FILL' | 'FIT' | 'CROP' | 'TILE' | undefined,
   context: GenerationContext
 ): Promise<void> {
+  // Validate URL to prevent malicious protocols (javascript:, data:, file:, etc.)
+  if (!isValidImageUrl(imageUrl)) {
+    context.warnings.push(`Blocked non-HTTP image URL: ${imageUrl}`);
+    return;
+  }
+
   try {
     const image = await figma.createImageAsync(imageUrl);
     const imagePaint: ImagePaint = {
