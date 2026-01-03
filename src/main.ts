@@ -145,27 +145,41 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
   }
 };
 
-async function extractIconRegistry(libraryName: string): Promise<IconRegistry> {
+async function extractIconRegistry(libraryName: string): Promise<IconRegistry & { extractionWarnings?: string[] }> {
   const icons: Record<string, string> = {};
-
-  // Find all instances in the document
+  const warnings: string[] = [];
   const allNodes = figma.root.findAll(n => n.type === 'INSTANCE') as InstanceNode[];
+
+  let processed = 0;
+  let skipped = 0;
 
   for (const instance of allNodes) {
     const mainComponent = instance.mainComponent;
-    if (!mainComponent) continue;
+    if (!mainComponent) {
+      skipped++;
+      continue;
+    }
 
     try {
       const key = mainComponent.key;
-      // Normalize icon name: lowercase, spaces to hyphens
+      if (!key) {
+        skipped++;
+        continue;
+      }
       const name = mainComponent.name.toLowerCase().replace(/\s+/g, '-');
-
       if (!icons[name]) {
         icons[name] = key;
+        processed++;
       }
     } catch (e) {
-      // Skip if can't get key (e.g., local component)
+      skipped++;
+      console.warn(`Skipped instance ${instance.name}:`, e);
+      // Local components don't have keys - this is expected
     }
+  }
+
+  if (skipped > 0 && processed === 0) {
+    warnings.push(`Skipped ${skipped} instances (likely local components). Place library icons to extract.`);
   }
 
   return {
@@ -174,5 +188,6 @@ async function extractIconRegistry(libraryName: string): Promise<IconRegistry> {
     figmaLibraryName: libraryName,
     extractedAt: new Date().toISOString(),
     icons,
+    ...(warnings.length > 0 && { extractionWarnings: warnings }),
   };
 }
