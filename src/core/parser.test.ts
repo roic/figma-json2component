@@ -1,6 +1,6 @@
 // src/core/parser.test.ts
 import { describe, it, expect } from 'vitest';
-import { parseSchema } from './parser';
+import { parseSchema, parseSchemas } from './parser';
 
 describe('parseSchema', () => {
   it('parses valid minimal schema', () => {
@@ -703,5 +703,82 @@ describe('parseSchema strokeDash validation', () => {
     const result = parseSchema(json);
     expect(result.valid).toBe(false);
     expect(result.errors.some(e => e.message.includes('strokeDash must be an array'))).toBe(true);
+  });
+});
+
+describe('parseSchema depth limits', () => {
+  it('rejects schema exceeding max nesting depth', () => {
+    // Build a deeply nested structure (51 levels)
+    let nested: any = { nodeType: 'text', id: 'deep', name: 'Deep' };
+    for (let i = 0; i < 51; i++) {
+      nested = {
+        nodeType: 'frame',
+        id: `frame-${i}`,
+        name: `Frame ${i}`,
+        children: [nested]
+      };
+    }
+
+    const json = JSON.stringify({
+      components: [{
+        id: 'test',
+        name: 'Test',
+        layout: {},
+        children: [nested]
+      }]
+    });
+
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('depth'))).toBe(true);
+  });
+});
+
+describe('parseSchemas multi-file', () => {
+  it('merges components from multiple files', () => {
+    const file1 = JSON.stringify({
+      components: [{ id: 'btn', name: 'Button', layout: {} }]
+    });
+    const file2 = JSON.stringify({
+      components: [{ id: 'card', name: 'Card', layout: {} }]
+    });
+
+    const result = parseSchemas([file1, file2]);
+
+    expect(result.valid).toBe(true);
+    expect(result.schema?.components).toHaveLength(2);
+  });
+
+  it('detects duplicate IDs across files', () => {
+    const file1 = JSON.stringify({
+      components: [{ id: 'btn', name: 'Button', layout: {} }]
+    });
+    const file2 = JSON.stringify({
+      components: [{ id: 'btn', name: 'Button2', layout: {} }]
+    });
+
+    const result = parseSchemas([file1, file2]);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('Duplicate'))).toBe(true);
+  });
+
+  it('separates registries from schemas', () => {
+    const schema = JSON.stringify({
+      components: [{ id: 'btn', name: 'Button', layout: {} }]
+    });
+    const registry = JSON.stringify({
+      type: 'icon-registry',
+      library: 'lucide',
+      figmaLibraryName: 'Lucide',
+      icons: { search: 'key123' }
+    });
+
+    const result = parseSchemas([schema, registry]);
+
+    expect(result.valid).toBe(true);
+    expect(result.schema?.components).toHaveLength(1);
+    expect(result.registries).toHaveLength(1);
+    expect(result.registries[0].library).toBe('lucide');
   });
 });
