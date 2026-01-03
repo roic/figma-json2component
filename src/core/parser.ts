@@ -56,8 +56,8 @@ export function parseSchemas(jsonStrings: string[]): ParseResult {
       return;
     }
 
-    // Otherwise, treat as component schema
-    const result = parseSchema(jsonString);
+    // Otherwise, treat as component schema - use already-parsed object
+    const result = parseSchemaFromObject(parsed);
     if (result.valid && result.schema) {
       parsedSchemas.push(result.schema);
     }
@@ -163,9 +163,6 @@ function mergeSchemas(schemas: Schema[]): Schema {
 }
 
 export function parseSchema(jsonString: string): ParseResult {
-  const errors: ValidationError[] = [];
-  const warnings: ValidationError[] = [];
-
   // Step 1: Parse JSON
   let raw: unknown;
   try {
@@ -180,7 +177,19 @@ export function parseSchema(jsonString: string): ParseResult {
     };
   }
 
-  // Step 2: Validate structure
+  // Step 2: Delegate to parseSchemaFromObject for validation
+  return parseSchemaFromObject(raw);
+}
+
+/**
+ * Parse and validate an already-parsed JSON object as a schema.
+ * This avoids double JSON parsing when called from parseSchemas.
+ */
+export function parseSchemaFromObject(raw: unknown): ParseResult {
+  const errors: ValidationError[] = [];
+  const warnings: ValidationError[] = [];
+
+  // Validate structure
   if (!isRecord(raw)) {
     return {
       valid: false,
