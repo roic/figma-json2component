@@ -18,46 +18,50 @@ export interface ResolutionResult<T> {
 }
 
 /**
- * Resolve a variable token.
- *
- * Note: The variableMap is now pre-indexed with all naming variations,
- * so we just need to normalize the input and do a simple lookup.
- * Fallback strategies are kept for edge cases not covered by pre-indexing.
+ * Configuration for the generic token resolution helper.
  */
-export function resolveVariable(
+interface TokenResolutionConfig {
+  /** Common prefixes to try prepending (both dot and slash variants are generated) */
+  prefixBases: string[];
+}
+
+/**
+ * Generic token resolution helper that reduces duplication across
+ * resolveVariable, resolveTextStyle, and resolveEffectStyle.
+ *
+ * @param tokenPath - The token path from the JSON schema
+ * @param tokenMap - Pre-indexed map of tokens
+ * @param config - Configuration specifying which prefixes to try
+ * @param getAvailableNames - Function to extract unique display names from tokens
+ */
+function resolveToken<T extends { name: string }>(
   tokenPath: string,
-  variableMap: Map<string, Variable>
-): ResolutionResult<Variable> {
+  tokenMap: Map<string, T>,
+  config: TokenResolutionConfig,
+  getAvailableNames: (map: Map<string, T>) => string[]
+): ResolutionResult<T> {
   const triedNames: string[] = [];
   const normalized = tokenPath.toLowerCase();
-  const availableNames = Array.from(new Set(
-    Array.from(variableMap.values()).map(v => v.name)
-  ));
+  const availableNames = getAvailableNames(tokenMap);
 
   // Primary lookup: normalized lowercase (index has all patterns)
   triedNames.push(tokenPath);
-  let result = variableMap.get(normalized);
+  let result = tokenMap.get(normalized);
   if (result) {
     return { value: result, triedNames, availableNames, suggestion: null };
   }
 
-  // Fallback: Try with common semantic prefixes for schemas that include them
-  const prefixVariants = [
-    normalized,
-    `semantic.${normalized}`,
-    `semantic/${normalized}`,
-    `primitives.${normalized}`,
-    `primitives/${normalized}`,
-    `core.${normalized}`,
-    `core/${normalized}`,
-    `tokens.${normalized}`,
-    `tokens/${normalized}`,
-  ];
+  // Fallback: Try with common prefixes (both dot and slash variants)
+  const prefixVariants = [normalized];
+  for (const base of config.prefixBases) {
+    prefixVariants.push(`${base}.${normalized}`);
+    prefixVariants.push(`${base}/${normalized}`);
+  }
 
   for (const variant of prefixVariants) {
     if (variant !== normalized) {
       triedNames.push(variant);
-      result = variableMap.get(variant);
+      result = tokenMap.get(variant);
       if (result) {
         return { value: result, triedNames, availableNames, suggestion: null };
       }
@@ -69,14 +73,14 @@ export function resolveVariable(
   const lastSegment = segments[segments.length - 1];
   if (lastSegment && segments.length > 1) {
     triedNames.push(`*/${lastSegment}`);
-    for (const [name, variable] of variableMap.entries()) {
+    for (const [name, token] of tokenMap.entries()) {
       const nameLower = name.toLowerCase();
       if (nameLower.endsWith('/' + lastSegment) || nameLower.endsWith('.' + lastSegment)) {
         return {
-          value: variable,
+          value: token,
           triedNames,
           availableNames,
-          suggestion: variable.name,
+          suggestion: token.name,
         };
       }
     }
@@ -91,6 +95,40 @@ export function resolveVariable(
     availableNames,
     suggestion,
   };
+}
+
+/** Prefix configuration for variable tokens */
+const VARIABLE_PREFIXES: TokenResolutionConfig = {
+  prefixBases: ['semantic', 'primitives', 'core', 'tokens'],
+};
+
+/** Prefix configuration for text style tokens */
+const TEXT_STYLE_PREFIXES: TokenResolutionConfig = {
+  prefixBases: ['typography', 'text', 'font'],
+};
+
+/** Prefix configuration for effect style tokens */
+const EFFECT_STYLE_PREFIXES: TokenResolutionConfig = {
+  prefixBases: ['effects', 'shadow'],
+};
+
+/**
+ * Resolve a variable token.
+ *
+ * Note: The variableMap is now pre-indexed with all naming variations,
+ * so we just need to normalize the input and do a simple lookup.
+ * Fallback strategies are kept for edge cases not covered by pre-indexing.
+ */
+export function resolveVariable(
+  tokenPath: string,
+  variableMap: Map<string, Variable>
+): ResolutionResult<Variable> {
+  return resolveToken(
+    tokenPath,
+    variableMap,
+    VARIABLE_PREFIXES,
+    (map) => Array.from(new Set(Array.from(map.values()).map(v => v.name)))
+  );
 }
 
 /**
@@ -103,67 +141,12 @@ export function resolveTextStyle(
   tokenPath: string,
   textStyleMap: Map<string, TextStyle>
 ): ResolutionResult<TextStyle> {
-  const triedNames: string[] = [];
-  const normalized = tokenPath.toLowerCase();
-  const availableNames = Array.from(new Set(
-    Array.from(textStyleMap.values()).map(s => s.name)
-  ));
-
-  // Primary lookup: normalized lowercase (index has all patterns)
-  triedNames.push(tokenPath);
-  let result = textStyleMap.get(normalized);
-  if (result) {
-    return { value: result, triedNames, availableNames, suggestion: null };
-  }
-
-  // Fallback: Try with common typography prefixes
-  const prefixVariants = [
-    normalized,
-    `typography.${normalized}`,
-    `typography/${normalized}`,
-    `text.${normalized}`,
-    `text/${normalized}`,
-    `font.${normalized}`,
-    `font/${normalized}`,
-  ];
-
-  for (const variant of prefixVariants) {
-    if (variant !== normalized) {
-      triedNames.push(variant);
-      result = textStyleMap.get(variant);
-      if (result) {
-        return { value: result, triedNames, availableNames, suggestion: null };
-      }
-    }
-  }
-
-  // Last resort: Partial match on final segment
-  const segments = normalized.split(/[./]/);
-  const lastSegment = segments[segments.length - 1];
-  if (lastSegment && segments.length > 1) {
-    triedNames.push(`*/${lastSegment}`);
-    for (const [name, style] of textStyleMap.entries()) {
-      const nameLower = name.toLowerCase();
-      if (nameLower.endsWith('/' + lastSegment) || nameLower.endsWith('.' + lastSegment)) {
-        return {
-          value: style,
-          triedNames,
-          availableNames,
-          suggestion: style.name,
-        };
-      }
-    }
-  }
-
-  // Not found - suggest similar names
-  const suggestion = findSuggestion(normalized, availableNames);
-
-  return {
-    value: null,
-    triedNames,
-    availableNames,
-    suggestion,
-  };
+  return resolveToken(
+    tokenPath,
+    textStyleMap,
+    TEXT_STYLE_PREFIXES,
+    (map) => Array.from(new Set(Array.from(map.values()).map(s => s.name)))
+  );
 }
 
 /**
@@ -173,65 +156,12 @@ export function resolveEffectStyle(
   tokenPath: string,
   effectStyleMap: Map<string, EffectStyle>
 ): ResolutionResult<EffectStyle> {
-  const triedNames: string[] = [];
-  const normalized = tokenPath.toLowerCase();
-  const availableNames = Array.from(new Set(
-    Array.from(effectStyleMap.values()).map(s => s.name)
-  ));
-
-  // Primary lookup: normalized lowercase (index has all patterns)
-  triedNames.push(tokenPath);
-  let result = effectStyleMap.get(normalized);
-  if (result) {
-    return { value: result, triedNames, availableNames, suggestion: null };
-  }
-
-  // Fallback: Try with common effect/shadow prefixes
-  const prefixVariants = [
-    normalized,
-    `effects.${normalized}`,
-    `effects/${normalized}`,
-    `shadow.${normalized}`,
-    `shadow/${normalized}`,
-  ];
-
-  for (const variant of prefixVariants) {
-    if (variant !== normalized) {
-      triedNames.push(variant);
-      result = effectStyleMap.get(variant);
-      if (result) {
-        return { value: result, triedNames, availableNames, suggestion: null };
-      }
-    }
-  }
-
-  // Last resort: Partial match on final segment
-  const segments = normalized.split(/[./]/);
-  const lastSegment = segments[segments.length - 1];
-  if (lastSegment && segments.length > 1) {
-    triedNames.push(`*/${lastSegment}`);
-    for (const [name, style] of effectStyleMap.entries()) {
-      const nameLower = name.toLowerCase();
-      if (nameLower.endsWith('/' + lastSegment) || nameLower.endsWith('.' + lastSegment)) {
-        return {
-          value: style,
-          triedNames,
-          availableNames,
-          suggestion: style.name,
-        };
-      }
-    }
-  }
-
-  // Not found - suggest similar names
-  const suggestion = findSuggestion(normalized, availableNames);
-
-  return {
-    value: null,
-    triedNames,
-    availableNames,
-    suggestion,
-  };
+  return resolveToken(
+    tokenPath,
+    effectStyleMap,
+    EFFECT_STYLE_PREFIXES,
+    (map) => Array.from(new Set(Array.from(map.values()).map(s => s.name)))
+  );
 }
 
 /**
