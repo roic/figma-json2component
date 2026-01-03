@@ -19,7 +19,12 @@ interface TokenValidationResult {
 }
 
 let currentSchema: ParsedSchema | null = null;
-let pendingGeneration = false;
+
+// Module state
+const state = {
+  jsonContents: [] as string[],
+  pendingGeneration: false,
+};
 
 // File picker handling
 const filePicker = document.getElementById('filePicker')!;
@@ -150,7 +155,7 @@ function handleJsonContents(jsonStrings: string[], fileNames: string[]) {
     generateBtn.disabled = false;
 
     // Store all JSON contents for sending to main
-    (window as { jsonContents?: string[] }).jsonContents = jsonStrings;
+    state.jsonContents = jsonStrings;
 
   } catch (err) {
     showFileError(`JSON parse error: ${(err as Error).message}`);
@@ -167,13 +172,13 @@ function showFileError(message: string) {
 }
 
 generateBtn.addEventListener('click', () => {
-  const jsonContents = (window as { jsonContents?: string[] }).jsonContents;
+  const jsonContents = state.jsonContents;
   if (!jsonContents || jsonContents.length === 0) return;
 
   // First, validate tokens
   generateBtn.textContent = 'Checking tokens...';
   generateBtn.disabled = true;
-  pendingGeneration = true;
+  state.pendingGeneration = true;
 
   parent.postMessage({
     pluginMessage: {
@@ -186,7 +191,7 @@ generateBtn.addEventListener('click', () => {
 });
 
 function proceedWithGeneration() {
-  const jsonContents = (window as { jsonContents?: string[] }).jsonContents;
+  const jsonContents = state.jsonContents;
   if (!jsonContents || jsonContents.length === 0) return;
 
   // Get selected component IDs
@@ -250,7 +255,7 @@ function hideTokenDialog() {
 
 dialogCancel.addEventListener('click', () => {
   hideTokenDialog();
-  pendingGeneration = false;
+  state.pendingGeneration = false;
   generateBtn.textContent = 'Generate Components';
   generateBtn.disabled = false;
 });
@@ -302,7 +307,7 @@ window.onmessage = (event) => {
       // Parse error
       generateBtn.textContent = 'Generate Components';
       generateBtn.disabled = false;
-      pendingGeneration = false;
+      state.pendingGeneration = false;
       tokenStatus.innerHTML = `<span class="status error">✗ ${result.error}</span>`;
       return;
     }
@@ -333,7 +338,7 @@ window.onmessage = (event) => {
   if (msg.type === 'generation-complete') {
     generateBtn.textContent = 'Generate Components';
     generateBtn.disabled = false;
-    pendingGeneration = false;
+    state.pendingGeneration = false;
   }
 
   if (msg.type === 'token-warnings') {
