@@ -5,11 +5,17 @@ import { GenerationContext, PLUGIN_DATA_KEY } from './types';
 import { buildSuffixIndex } from '../tokenResolver';
 
 /**
- * Generate all possible lookup keys for a variable.
+ * Generate multiple lookup aliases for a variable to support various naming conventions.
  *
- * Handles Tokens Studio naming variations by generating multiple lookup keys
- * for each variable. This allows flexible token references in schemas regardless
- * of how the tokens were imported or named.
+ * Design systems use different naming patterns depending on the tooling:
+ * - Tokens Studio: "primitives/colors/primary" (slash-separated hierarchies)
+ * - Figma Variables: "Colors/Primary" (Title Case, slash-separated)
+ * - Code references: "colors.primary" or "colors-primary" (dot or kebab notation)
+ * - CSS custom properties: "--colors-primary" (kebab-case with prefix)
+ *
+ * We generate multiple aliases for each variable so that schema authors can reference
+ * tokens using ANY of these conventions and still get a match. This eliminates the
+ * need for users to know exactly how tokens were imported into Figma.
  *
  * @param variableName - The variable name (e.g., "colors/primary" or "colors.primary")
  * @param collectionName - The collection name (e.g., "primitives" or "primitives/colors")
@@ -22,19 +28,28 @@ import { buildSuffixIndex } from '../tokenResolver';
  */
 export function buildVariableLookupAliases(variableName: string, collectionName: string): string[] {
   const keys: string[] = [];
+
+  // All lookups are case-insensitive to handle Figma's Title Case vs lowercase in code
   const lowerName = variableName.toLowerCase();
   const lowerCollection = collectionName.toLowerCase();
 
-  // 1. Original name (normalized)
+  // 1. Original name only (normalized to lowercase)
+  // Allows simple lookups like "primary" when variable names are unique across collections
   keys.push(lowerName);
 
-  // 2. With collection prefix (slash notation)
+  // 2. Full path with collection prefix using slash notation
+  // Matches Tokens Studio format: "primitives/colors/primary"
+  // Needed when multiple collections have variables with the same name
   keys.push(`${lowerCollection}/${lowerName}`);
 
-  // 3. With collection prefix (dot notation)
+  // 3. Full path with collection prefix using dot notation
+  // Matches code-style references: "primitives.colors.primary"
+  // Common in TypeScript/JavaScript token exports
   keys.push(`${lowerCollection}.${lowerName}`);
 
-  // 4. Variable name with dot-to-slash conversion
+  // 4. Convert dots to slashes in variable name
+  // Handles case where Tokens Studio exports "colors.primary" but user references "colors/primary"
+  // This bidirectional conversion ensures both formats work regardless of source
   const nameWithSlashes = lowerName.replace(/\./g, '/');
   if (nameWithSlashes !== lowerName) {
     keys.push(nameWithSlashes);
@@ -42,7 +57,9 @@ export function buildVariableLookupAliases(variableName: string, collectionName:
     keys.push(`${lowerCollection}.${nameWithSlashes}`);
   }
 
-  // 5. Variable name with slash-to-dot conversion
+  // 5. Convert slashes to dots in variable name
+  // Inverse of above: "colors/primary" can be looked up as "colors.primary"
+  // Useful when copying token paths from Figma's variable panel (which uses slashes)
   const nameWithDots = lowerName.replace(/\//g, '.');
   if (nameWithDots !== lowerName) {
     keys.push(nameWithDots);
@@ -50,16 +67,17 @@ export function buildVariableLookupAliases(variableName: string, collectionName:
     keys.push(`${lowerCollection}.${nameWithDots}`);
   }
 
-  // 6. Handle multi-segment collection names (e.g., "primitives/spacing")
-  // For variable "sm" in collection "primitives/spacing", also index as:
-  // - "spacing/sm" and "spacing.sm" (using last segment of collection)
+  // 6. Handle hierarchical collection names (e.g., "primitives/spacing")
+  // Tokens Studio often creates nested collections like "primitives/spacing" with variable "sm".
+  // Users might reference this as "spacing/sm" (using only the leaf segment of the collection).
+  // This allows shorter, more intuitive references without the full collection path.
   const collectionSegments = lowerCollection.split('/');
   if (collectionSegments.length > 1) {
     const lastSegment = collectionSegments[collectionSegments.length - 1];
     keys.push(`${lastSegment}/${lowerName}`);
     keys.push(`${lastSegment}.${lowerName}`);
 
-    // Also with variable name transformations
+    // Also apply dot/slash transformations with the shortened collection prefix
     if (nameWithSlashes !== lowerName) {
       keys.push(`${lastSegment}/${nameWithSlashes}`);
       keys.push(`${lastSegment}.${nameWithSlashes}`);
@@ -70,7 +88,10 @@ export function buildVariableLookupAliases(variableName: string, collectionName:
     }
   }
 
-  // 7. Strip collection from variable name if it starts with it
+  // 7. Strip redundant collection prefix from variable name
+  // Some Tokens Studio configurations create variables like "colors/primary" inside
+  // a collection also named "colors", resulting in "colors/colors/primary" lookups.
+  // This deduplicates by stripping the collection name when it's already in the variable path.
   if (lowerName.startsWith(lowerCollection + '/')) {
     const withoutCollection = lowerName.slice(lowerCollection.length + 1);
     keys.push(withoutCollection);
@@ -86,10 +107,14 @@ export function buildVariableLookupAliases(variableName: string, collectionName:
 }
 
 /**
- * Generate all possible lookup keys for a text/effect style.
+ * Generate multiple lookup aliases for a text or effect style.
  *
- * Creates multiple lookup keys to handle different naming conventions
- * (slash vs dot notation, common prefixes like "typography/").
+ * Like variables, styles in Figma can have different naming conventions:
+ * - Figma default: "Typography/Heading/H1" (slash-separated, Title Case)
+ * - Design tokens: "typography.heading.h1" (dot-separated, lowercase)
+ * - Shorthand: "heading/h1" (without category prefix)
+ *
+ * This function generates aliases to match styles regardless of how they're referenced.
  *
  * @param styleName - The style name (e.g., "Typography/Label" or "typography.label")
  * @returns Array of normalized lookup keys for the style
@@ -100,33 +125,45 @@ export function buildVariableLookupAliases(variableName: string, collectionName:
  */
 export function generateStyleKeys(styleName: string): string[] {
   const keys: string[] = [];
+
+  // Normalize to lowercase for case-insensitive matching
   const lowerName = styleName.toLowerCase();
 
-  // 1. Original name (normalized)
+  // 1. Original name (normalized to lowercase)
+  // Handles exact matches with case normalization
   keys.push(lowerName);
 
-  // 2. Dot-to-slash conversion
+  // 2. Convert dots to slashes
+  // Allows "typography.heading.h1" to match Figma's "Typography/Heading/H1"
   const withSlashes = lowerName.replace(/\./g, '/');
   if (withSlashes !== lowerName) {
     keys.push(withSlashes);
   }
 
-  // 3. Slash-to-dot conversion
+  // 3. Convert slashes to dots
+  // Allows "typography/heading/h1" to match code-style "typography.heading.h1" references
   const withDots = lowerName.replace(/\//g, '.');
   if (withDots !== lowerName) {
     keys.push(withDots);
   }
 
-  // 4. Capitalized variants (Typography/Label vs typography/label)
+  // 4. Handle case variants
+  // Figma uses Title Case ("Typography/Label") but code often uses lowercase
+  // This is already handled by lowerName, but we keep the explicit transformation
+  // for clarity and potential future case-aware matching
   const capitalizedFirst = styleName.charAt(0).toUpperCase() + styleName.slice(1).toLowerCase();
   keys.push(capitalizedFirst.toLowerCase());
 
-  // 5. Strip common prefixes
+  // 5. Strip common category prefixes
+  // Design systems often organize styles under "typography/", "text/", "font/", etc.
+  // Users may want to reference "heading/h1" without knowing the parent category.
+  // This allows shorthand references: "heading/h1" instead of "typography/heading/h1"
   const prefixes = ['typography/', 'typography.', 'text/', 'text.', 'font/', 'font.', 'effects/', 'effects.', 'shadow/', 'shadow.'];
   for (const prefix of prefixes) {
     if (lowerName.startsWith(prefix)) {
       const withoutPrefix = lowerName.slice(prefix.length);
       keys.push(withoutPrefix);
+      // Also generate dot and slash variants of the stripped name
       keys.push(withoutPrefix.replace(/\//g, '.'));
       keys.push(withoutPrefix.replace(/\./g, '/'));
     }
