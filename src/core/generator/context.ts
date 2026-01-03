@@ -6,7 +6,19 @@ import { buildSuffixIndex } from '../tokenResolver';
 
 /**
  * Generate all possible lookup keys for a variable.
- * Handles Tokens Studio naming variations.
+ *
+ * Handles Tokens Studio naming variations by generating multiple lookup keys
+ * for each variable. This allows flexible token references in schemas regardless
+ * of how the tokens were imported or named.
+ *
+ * @param variableName - The variable name (e.g., "colors/primary" or "colors.primary")
+ * @param collectionName - The collection name (e.g., "primitives" or "primitives/colors")
+ * @returns Array of normalized lookup keys for the variable
+ *
+ * @example
+ * // For variable "primary" in collection "colors":
+ * const keys = buildVariableLookupAliases('primary', 'colors');
+ * // Returns: ['primary', 'colors/primary', 'colors.primary', ...]
  */
 export function buildVariableLookupAliases(variableName: string, collectionName: string): string[] {
   const keys: string[] = [];
@@ -75,6 +87,16 @@ export function buildVariableLookupAliases(variableName: string, collectionName:
 
 /**
  * Generate all possible lookup keys for a text/effect style.
+ *
+ * Creates multiple lookup keys to handle different naming conventions
+ * (slash vs dot notation, common prefixes like "typography/").
+ *
+ * @param styleName - The style name (e.g., "Typography/Label" or "typography.label")
+ * @returns Array of normalized lookup keys for the style
+ *
+ * @example
+ * const keys = generateStyleKeys('Typography/Heading/H1');
+ * // Returns: ['typography/heading/h1', 'heading/h1', 'heading.h1', ...]
  */
 export function generateStyleKeys(styleName: string): string[] {
   const keys: string[] = [];
@@ -113,6 +135,26 @@ export function generateStyleKeys(styleName: string): string[] {
   return keys;
 }
 
+/**
+ * Build the generation context with all lookup maps and resolvers.
+ *
+ * Creates a context object containing:
+ * - componentMap: Existing components indexed by plugin data ID
+ * - variableMap: All variables indexed by multiple lookup keys
+ * - textStyleMap: Text styles indexed by multiple lookup keys
+ * - effectStyleMap: Effect styles indexed by multiple lookup keys
+ * - iconResolver: Resolver for iconRef lookups
+ * - warnings: Array to collect warnings during generation
+ *
+ * @param warnings - Array to collect warnings during context building
+ * @param registries - Icon registries for iconRef resolution
+ * @param componentMap - Optional pre-built component map (for caching)
+ * @returns The generation context for use by generator functions
+ *
+ * @example
+ * const context = await buildContext([], [lucideRegistry], componentMap);
+ * const colorVar = context.variableMap.get('colors/primary');
+ */
 export async function buildContext(
   warnings: string[],
   registries: IconRegistry[] = [],

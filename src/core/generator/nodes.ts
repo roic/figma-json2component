@@ -7,6 +7,16 @@ import { applyLayout } from './layout';
 
 /**
  * Create a child node based on its type.
+ *
+ * Factory function that dispatches to the appropriate node creation function
+ * based on the nodeType field in the definition.
+ *
+ * @param def - The child node definition from the schema
+ * @param context - Generation context for token resolution and warnings
+ * @returns The created SceneNode, or null if node type is unsupported
+ *
+ * @example
+ * const node = await createChildNode({ nodeType: 'text', name: 'Label', text: 'Hello' }, context);
  */
 export async function createChildNode(
   def: ChildNode,
@@ -30,6 +40,21 @@ export async function createChildNode(
 
 /**
  * Create a frame node with layout, styles, and children.
+ *
+ * Frames are container nodes that support auto-layout, styling, and
+ * nested children. They are the primary building block for component structure.
+ *
+ * @param def - The frame definition from the schema
+ * @param context - Generation context for token resolution and warnings
+ * @returns The created FrameNode with all properties applied
+ *
+ * @example
+ * const frame = await createFrameNode({
+ *   nodeType: 'frame',
+ *   name: 'Container',
+ *   layout: { direction: 'horizontal', gap: 8 },
+ *   children: [...]
+ * }, context);
  */
 export async function createFrameNode(
   def: Extract<ChildNode, { nodeType: 'frame' }>,
@@ -61,6 +86,22 @@ export async function createFrameNode(
 
 /**
  * Create a text node with font loading, styles, and text content.
+ *
+ * Handles font loading with a fallback chain (Inter > Roboto > Arial),
+ * text style application via tokens, and fill color with opacity support.
+ *
+ * @param def - The text node definition from the schema
+ * @param context - Generation context for token resolution and warnings
+ * @returns The created TextNode with all properties applied
+ *
+ * @example
+ * const text = await createTextNode({
+ *   nodeType: 'text',
+ *   name: 'Label',
+ *   text: 'Click me',
+ *   textStyleToken: 'typography/label',
+ *   fillToken: 'colors/text/primary'
+ * }, context);
  */
 export async function createTextNode(
   def: Extract<ChildNode, { nodeType: 'text' }>,
@@ -187,6 +228,21 @@ export async function createTextNode(
 
 /**
  * Create a rectangle node with sizing and styles.
+ *
+ * Rectangles are basic shape nodes that support fills, strokes, corner radius,
+ * and image fills. Useful for backgrounds, dividers, and decorative elements.
+ *
+ * @param def - The rectangle definition from the schema
+ * @param context - Generation context for token resolution and warnings
+ * @returns The created RectangleNode with all properties applied
+ *
+ * @example
+ * const rect = await createRectangleNode({
+ *   nodeType: 'rectangle',
+ *   name: 'Background',
+ *   layout: { width: 100, height: 50 },
+ *   fillToken: 'colors/surface/secondary'
+ * }, context);
  */
 export async function createRectangleNode(
   def: Extract<ChildNode, { nodeType: 'rectangle' }>,
@@ -216,6 +272,21 @@ export async function createRectangleNode(
 
 /**
  * Create an ellipse node with sizing and styles.
+ *
+ * Ellipses are shape nodes that render as circles or ovals.
+ * Support fills, strokes, and other style properties.
+ *
+ * @param def - The ellipse definition from the schema
+ * @param context - Generation context for token resolution and warnings
+ * @returns The created EllipseNode with all properties applied
+ *
+ * @example
+ * const circle = await createEllipseNode({
+ *   nodeType: 'ellipse',
+ *   name: 'Avatar',
+ *   layout: { width: 40, height: 40 },
+ *   imageUrl: 'https://example.com/avatar.png'
+ * }, context);
  */
 export async function createEllipseNode(
   def: Extract<ChildNode, { nodeType: 'ellipse' }>,
@@ -240,7 +311,19 @@ export async function createEllipseNode(
 
 /**
  * Create a visible placeholder frame for a missing icon/component.
- * Shows red dashed border to make it obvious something is missing.
+ *
+ * Shows a red dashed border to make it obvious something is missing.
+ * Stores the error message in plugin data for debugging.
+ *
+ * @param def - The instance definition that failed to resolve
+ * @param errorMessage - Description of why the icon/component is missing
+ * @returns A placeholder FrameNode styled to indicate a missing element
+ *
+ * @example
+ * const placeholder = createMissingIconPlaceholder(
+ *   def,
+ *   "Icon 'lucide:missing' not found in any registry"
+ * );
  */
 export function createMissingIconPlaceholder(
   def: Extract<ChildNode, { nodeType: 'instance' }>,
@@ -272,6 +355,39 @@ export function createMissingIconPlaceholder(
 
 /**
  * Create an instance node from a component reference or library component.
+ *
+ * Supports three ways to reference the source component:
+ * 1. iconRef - Resolved via icon registries to a componentKey
+ * 2. componentKey - Direct library component key for import
+ * 3. ref - Reference to a locally-defined component by ID
+ *
+ * Also handles:
+ * - Variant selection via variantProps
+ * - Sizing via layout properties
+ * - Text overrides for nested text nodes
+ *
+ * @param def - The instance definition from the schema
+ * @param context - Generation context for component lookup and warnings
+ * @returns The created InstanceNode, a placeholder frame if missing, or null
+ *
+ * @example
+ * // Using local ref
+ * const instance = await createInstanceNode({
+ *   nodeType: 'instance',
+ *   name: 'PrimaryButton',
+ *   ref: 'button',
+ *   variantProps: { type: 'primary', size: 'md' },
+ *   overrides: { label: { text: 'Submit' } }
+ * }, context);
+ *
+ * @example
+ * // Using iconRef
+ * const icon = await createInstanceNode({
+ *   nodeType: 'instance',
+ *   name: 'CheckIcon',
+ *   iconRef: 'lucide:check',
+ *   layout: { width: 16, height: 16 }
+ * }, context);
  */
 export async function createInstanceNode(
   def: Extract<ChildNode, { nodeType: 'instance' }>,

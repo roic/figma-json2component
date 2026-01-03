@@ -5,7 +5,12 @@ import { GenerationContext } from './types';
 
 /**
  * Validate that a URL is a valid HTTP/HTTPS URL.
- * Blocks potentially malicious URLs like javascript:, data:, file:, etc.
+ *
+ * Blocks potentially malicious URL schemes (javascript:, data:, file:, etc.)
+ * to prevent security issues when loading external images.
+ *
+ * @param url - The URL string to validate
+ * @returns True if the URL uses http: or https: protocol
  */
 function isValidImageUrl(url: string): boolean {
   try {
@@ -17,7 +22,18 @@ function isValidImageUrl(url: string): boolean {
 }
 
 /**
- * Apply an image fill from a URL.
+ * Apply an image fill from a URL to a node.
+ *
+ * Downloads the image from the provided URL and sets it as the node's fill.
+ * Validates the URL to ensure it uses HTTP/HTTPS protocol for security.
+ *
+ * @param node - The node to apply the image fill to
+ * @param imageUrl - URL of the image to load
+ * @param scaleMode - How to scale the image (FILL, FIT, CROP, or TILE)
+ * @param context - Generation context for collecting warnings
+ *
+ * @example
+ * await applyImageFill(frame, 'https://example.com/image.png', 'FILL', context);
  */
 export async function applyImageFill(
   node: GeometryMixin & MinimalFillsMixin,
@@ -47,7 +63,30 @@ export async function applyImageFill(
 }
 
 /**
- * Apply style properties (fill, stroke, radius, shadow, opacity) to a node.
+ * Apply style properties to a node.
+ *
+ * Handles the following style properties:
+ * - Fill color (with token binding and opacity support)
+ * - Stroke color and width (with token binding)
+ * - Stroke dash pattern
+ * - Corner radius (with token binding)
+ * - Shadow/effects (with effect style token binding)
+ * - Layer opacity (with token binding)
+ *
+ * Clears existing styles before applying new ones to ensure clean state,
+ * unless the corresponding style property is explicitly specified.
+ *
+ * @param node - The node to apply styles to
+ * @param styles - Style properties from the schema
+ * @param context - Generation context for token resolution and warnings
+ *
+ * @example
+ * await applyStyles(frame, {
+ *   fillToken: 'colors/surface/primary',
+ *   strokeToken: 'colors/border/default',
+ *   radiusToken: 'radii/md',
+ *   strokeWidth: 1
+ * }, context);
  */
 export async function applyStyles(
   node: FrameNode | ComponentNode | RectangleNode | EllipseNode,

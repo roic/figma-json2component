@@ -11,7 +11,16 @@ import { resolveVariable, formatResolutionError, validateVariableType } from '..
 import { GenerationContext } from './types';
 
 /**
- * Apply padding with optional token binding.
+ * Apply padding to a single side with optional token binding.
+ *
+ * If a token is provided, resolves and binds it to the padding property.
+ * Falls back to raw value if token resolution fails or no token provided.
+ *
+ * @param node - The node to apply padding to
+ * @param paddingField - Which padding property to set
+ * @param tokenValue - Optional token reference for the padding
+ * @param rawValue - Raw padding value in pixels (used if no token)
+ * @param context - Generation context for token resolution and warnings
  */
 export async function applyPaddingWithToken(
   node: FrameNode | ComponentNode,
@@ -41,7 +50,28 @@ export async function applyPaddingWithToken(
 }
 
 /**
- * Apply layout properties (auto-layout, padding, gap, alignment, sizing) to a node.
+ * Apply layout properties to a frame or component node.
+ *
+ * Configures auto-layout settings including:
+ * - Direction (horizontal/vertical)
+ * - Padding (uniform or per-side, with token support)
+ * - Gap/spacing between items (with token support)
+ * - Wrap behavior
+ * - Alignment (alignItems, justifyContent)
+ * - Sizing (fixed, fill, hug)
+ *
+ * @param node - The frame or component node to configure
+ * @param layout - Layout properties from the schema
+ * @param context - Generation context for token resolution and warnings
+ *
+ * @example
+ * await applyLayout(frame, {
+ *   direction: 'horizontal',
+ *   gapToken: 'spacing/md',
+ *   alignItems: 'center',
+ *   width: 'hug',
+ *   height: 'fill'
+ * }, context);
  */
 export async function applyLayout(
   node: FrameNode | ComponentNode,
@@ -166,6 +196,20 @@ function applySizing(
 
 /**
  * Position generated components on the canvas according to organization config.
+ *
+ * Supports three layout modes:
+ * - 'pages': Creates separate pages for each category/tag group
+ * - 'frames': Creates labeled frames within the current page
+ * - 'grid': Flat grid layout on the current page
+ *
+ * Components can be grouped by category, tags, or not grouped at all.
+ *
+ * @param componentMap - Map of component IDs to their Figma nodes
+ * @param orderedIds - IDs of components to position (in generation order)
+ * @param schema - The schema containing organization configuration
+ *
+ * @example
+ * await positionComponents(componentMap, ['button', 'card'], schema);
  */
 export async function positionComponents(
   componentMap: Map<string, ComponentNode | ComponentSetNode>,

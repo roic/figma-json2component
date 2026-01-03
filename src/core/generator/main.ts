@@ -73,6 +73,24 @@ function findInstanceDependencies(children: ChildNode[]): string[] {
   return deps;
 }
 
+/**
+ * Generate Figma components from a validated schema.
+ *
+ * This is the main entry point for the generator. It resolves dependencies,
+ * expands selected IDs to include required dependencies, and creates/updates
+ * components in the correct order.
+ *
+ * @param schema - The validated schema containing component definitions
+ * @param selectedIds - IDs of components to generate (dependencies auto-included)
+ * @param registries - Icon registries for resolving iconRef fields
+ * @returns Result object with success status, warnings, and count of created components
+ *
+ * @example
+ * const result = await generateFromSchema(schema, ['button', 'card'], [lucideRegistry]);
+ * if (result.success) {
+ *   console.log(`Created ${result.createdCount} components`);
+ * }
+ */
 export async function generateFromSchema(
   schema: Schema,
   selectedIds: string[],
@@ -146,7 +164,15 @@ export async function generateFromSchema(
 
 /**
  * Build token lookup maps for validation.
- * Exported for pre-flight token validation.
+ *
+ * Creates maps of all available tokens (variables, text styles, effect styles)
+ * from the current Figma file. Exported for pre-flight token validation.
+ *
+ * @returns Object containing variableMap, textStyleMap, and effectStyleMap
+ *
+ * @example
+ * const { variableMap, textStyleMap } = await buildTokenMaps();
+ * const colorVar = variableMap.get('colors/primary');
  */
 export async function buildTokenMaps(): Promise<{
   variableMap: Map<string, Variable>;
@@ -251,6 +277,16 @@ function findVariantByProps(
   return null;
 }
 
+/**
+ * Create or update a single Figma component from a definition.
+ *
+ * If the component already exists (matched by plugin data ID), it updates
+ * the existing component in place. Otherwise, creates a new component.
+ *
+ * @param def - The component definition from the schema
+ * @param context - The generation context with token maps and warnings
+ * @returns The created or updated ComponentNode
+ */
 async function createOrUpdateComponent(
   def: ComponentDefinition,
   context: GenerationContext
@@ -288,6 +324,20 @@ async function createOrUpdateComponent(
   return comp;
 }
 
+/**
+ * Create or update a Figma component set (variant group) from a definition.
+ *
+ * Handles three scenarios:
+ * 1. Update existing set in place - preserves node identity and instance connections
+ * 2. Add new variants to existing set
+ * 3. Create entirely new component set
+ *
+ * Also removes stale variants that exist in Figma but not in the schema.
+ *
+ * @param def - The component set definition from the schema
+ * @param context - The generation context with token maps and warnings
+ * @returns The created or updated ComponentSetNode
+ */
 async function createOrUpdateComponentSet(
   def: ComponentSetDefinition,
   context: GenerationContext
