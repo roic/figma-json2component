@@ -645,7 +645,7 @@ function validateOrganization(org: unknown, path: string): { errors: ValidationE
 
 export interface TokenReference {
   token: string;
-  type: 'variable' | 'textStyle' | 'effectStyle';
+  category: 'variable' | 'textStyle' | 'effectStyle';
   path: string;  // Where in schema this token is referenced
 }
 
@@ -657,12 +657,12 @@ export function extractTokenReferences(schema: Schema): TokenReference[] {
   const refs: TokenReference[] = [];
   const seen = new Set<string>();
 
-  function addRef(token: string | undefined, type: TokenReference['type'], path: string) {
+  function addRef(token: string | undefined, category: TokenReference['category'], path: string) {
     if (!token) return;
-    const key = `${type}:${token}`;
+    const key = `${category}:${token}`;
     if (!seen.has(key)) {
       seen.add(key);
-      refs.push({ token, type, path });
+      refs.push({ token, category, path });
     }
   }
 

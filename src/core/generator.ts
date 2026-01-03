@@ -136,7 +136,7 @@ export async function buildTokenMaps(): Promise<{
       const variable = figma.variables.getVariableById(variableId);
       if (!variable) continue;
 
-      const keys = generateVariableKeys(variable.name, collection.name);
+      const keys = buildVariableLookupAliases(variable.name, collection.name);
       for (const key of keys) {
         if (!variableMap.has(key) || variableMap.get(key)!.id === variable.id) {
           variableMap.set(key, variable);
@@ -196,7 +196,7 @@ async function buildContext(warnings: string[], registries: IconRegistry[] = [])
       if (!variable) continue;
 
       // Generate multiple normalized lookup keys for each variable
-      const keys = generateVariableKeys(variable.name, collection.name);
+      const keys = buildVariableLookupAliases(variable.name, collection.name);
 
       // Store variable under all keys
       for (const key of keys) {
@@ -323,7 +323,7 @@ function findVariantByProps(
  * Generate all possible lookup keys for a variable.
  * Handles Tokens Studio naming variations.
  */
-function generateVariableKeys(variableName: string, collectionName: string): string[] {
+function buildVariableLookupAliases(variableName: string, collectionName: string): string[] {
   const keys: string[] = [];
   const lowerName = variableName.toLowerCase();
   const lowerCollection = collectionName.toLowerCase();

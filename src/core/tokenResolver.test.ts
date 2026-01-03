@@ -13,7 +13,7 @@ function createIndexedVariableMap(variables: Array<{ name: string; collectionNam
   variables.forEach(({ name, collectionName = 'default' }, index) => {
     const variable = { id: String(index + 1), name } as Variable;
 
-    // Add all normalized keys (same logic as generateVariableKeys)
+    // Add all normalized keys (same logic as buildVariableLookupAliases)
     const lowerName = name.toLowerCase();
     const lowerCollection = collectionName.toLowerCase();
 

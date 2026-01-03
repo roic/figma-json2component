@@ -42,21 +42,21 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
       const tokenLower = ref.token.toLowerCase();
       let isFound = false;
 
-      if (ref.type === 'variable') {
+      if (ref.category === 'variable') {
         isFound = variableMap.has(tokenLower);
-      } else if (ref.type === 'textStyle') {
+      } else if (ref.category === 'textStyle') {
         isFound = textStyleMap.has(tokenLower);
-      } else if (ref.type === 'effectStyle') {
+      } else if (ref.category === 'effectStyle') {
         isFound = effectStyleMap.has(tokenLower);
       }
 
       if (isFound) {
-        result.found.push({ token: ref.token, type: ref.type });
+        result.found.push({ token: ref.token, type: ref.category });
       } else {
         // Try to find a suggestion
         let suggestion: string | undefined;
-        const targetMap = ref.type === 'variable' ? variableMap
-          : ref.type === 'textStyle' ? textStyleMap
+        const targetMap = ref.category === 'variable' ? variableMap
+          : ref.category === 'textStyle' ? textStyleMap
           : effectStyleMap;
 
         // Simple suffix match for suggestions
@@ -68,7 +68,7 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
           }
         }
 
-        result.missing.push({ token: ref.token, type: ref.type, suggestion });
+        result.missing.push({ token: ref.token, type: ref.category, suggestion });
       }
     }
 
