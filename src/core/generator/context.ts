@@ -112,17 +112,14 @@ export function generateStyleKeys(styleName: string): string[] {
   return keys;
 }
 
-export async function buildContext(warnings: string[], registries: IconRegistry[] = []): Promise<GenerationContext> {
-  // Get existing components created by this plugin
-  const componentMap = new Map<string, ComponentNode | ComponentSetNode>();
-  const allComponents = figma.currentPage.findAll(n =>
-    (n.type === 'COMPONENT' || n.type === 'COMPONENT_SET') &&
-    n.getPluginData(PLUGIN_DATA_KEY)
-  );
-  allComponents.forEach(c => {
-    const id = c.getPluginData(PLUGIN_DATA_KEY);
-    if (id) componentMap.set(id, c as ComponentNode | ComponentSetNode);
-  });
+export async function buildContext(
+  warnings: string[],
+  registries: IconRegistry[] = [],
+  componentMap?: Map<string, ComponentNode | ComponentSetNode>
+): Promise<GenerationContext> {
+  // Use provided component map or create empty one
+  // The caller (generateFromSchema) provides the cached component map
+  const compMap = componentMap ?? new Map<string, ComponentNode | ComponentSetNode>();
 
   // Build collection-aware variable index (with warnings)
   const variableMap = new Map<string, Variable>();
@@ -203,5 +200,5 @@ export async function buildContext(warnings: string[], registries: IconRegistry[
   // Build icon resolver from registries
   const iconResolver = new IconRegistryResolver(registries);
 
-  return { componentMap, variableMap, textStyleMap, effectStyleMap, iconResolver, warnings };
+  return { componentMap: compMap, variableMap, textStyleMap, effectStyleMap, iconResolver, warnings };
 }

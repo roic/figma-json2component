@@ -15,6 +15,46 @@ import { applyStyles } from './styles';
 import { applyLayout, positionComponents } from './layout';
 import { createChildNode } from './nodes';
 
+// Component lookup cache
+let cachedComponentMap: Map<string, ComponentNode | ComponentSetNode> | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 5000; // 5 seconds
+
+/**
+ * Get the component map, using cached version if available and fresh.
+ * Components are looked up by their plugin data ID.
+ */
+export function getComponentMap(): Map<string, ComponentNode | ComponentSetNode> {
+  const now = Date.now();
+  if (cachedComponentMap && (now - cacheTimestamp) < CACHE_TTL) {
+    return cachedComponentMap;
+  }
+
+  cachedComponentMap = new Map();
+  const allComponents = figma.currentPage.findAll(n =>
+    (n.type === 'COMPONENT' || n.type === 'COMPONENT_SET') &&
+    n.getPluginData(PLUGIN_DATA_KEY)
+  );
+
+  allComponents.forEach(c => {
+    const id = c.getPluginData(PLUGIN_DATA_KEY);
+    if (id) cachedComponentMap!.set(id, c as ComponentNode | ComponentSetNode);
+  });
+
+  cacheTimestamp = now;
+  return cachedComponentMap;
+}
+
+/**
+ * Clear the component cache. Call after generation completes
+ * since new components were created that should be discovered
+ * on the next lookup.
+ */
+export function invalidateComponentCache(): void {
+  cachedComponentMap = null;
+  cacheTimestamp = 0;
+}
+
 // Helper to find instance dependencies in children
 function findInstanceDependencies(children: ChildNode[]): string[] {
   const deps: string[] = [];
@@ -46,8 +86,9 @@ export async function generateFromSchema(
     return { success: false, warnings: [], error: depResult.error, createdCount: 0 };
   }
 
-  // Build context
-  const context = await buildContext(warnings, registries);
+  // Build context with cached component map
+  const componentMap = getComponentMap();
+  const context = await buildContext(warnings, registries, componentMap);
 
   // Expand selected IDs to include all dependencies
   const selectedSet = new Set(selectedIds);
@@ -96,6 +137,9 @@ export async function generateFromSchema(
 
   // Position components using organization config
   await positionComponents(context.componentMap, orderedIds, schema);
+
+  // Invalidate cache since new components were created/modified
+  invalidateComponentCache();
 
   return { success: true, warnings: context.warnings, createdCount };
 }
