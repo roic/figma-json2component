@@ -30,7 +30,12 @@ interface GenerationContext {
 function findInstanceDependencies(children: ChildNode[]): string[] {
   const deps: string[] = [];
   for (const child of children) {
-    if (child.nodeType === 'instance') {
+    // Only track `ref` - not `componentKey` or `iconRef`.
+    // `componentKey` references library components (imported via figma.importComponentByKeyAsync)
+    // `iconRef` references icons from external libraries (also imported by key)
+    // Neither creates local dependencies that affect generation order.
+    // Only `ref` points to locally-defined components that must be created first.
+    if (child.nodeType === 'instance' && child.ref) {
       deps.push(child.ref);
     } else if (child.nodeType === 'frame' && child.children) {
       deps.push(...findInstanceDependencies(child.children));
