@@ -55,6 +55,49 @@ const copyRegistryBtn = document.getElementById('copyRegistryBtn')!;
 
 filePicker.addEventListener('click', () => fileInput.click());
 
+filePicker.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  filePicker.classList.add('drag-over');
+});
+
+filePicker.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  filePicker.classList.remove('drag-over');
+});
+
+filePicker.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  filePicker.classList.remove('drag-over');
+
+  const files = e.dataTransfer?.files;
+  if (!files || files.length === 0) return;
+
+  // Filter for JSON files
+  const jsonFiles = Array.from(files).filter(f => f.name.endsWith('.json'));
+  if (jsonFiles.length === 0) {
+    showFileError('Please drop JSON files');
+    return;
+  }
+
+  try {
+    const fileContents: string[] = [];
+    const fileNames: string[] = [];
+
+    for (const file of jsonFiles) {
+      const text = await file.text();
+      fileContents.push(text);
+      fileNames.push(file.name);
+    }
+
+    handleJsonContents(fileContents, fileNames);
+  } catch (err) {
+    showFileError('Failed to read dropped files');
+  }
+});
+
 fileInput.addEventListener('change', async (e) => {
   const files = (e.target as HTMLInputElement).files;
   if (!files || files.length === 0) return;
