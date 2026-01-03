@@ -1,6 +1,7 @@
 // src/core/parser.ts
 import type { Schema, ValidationResult, ValidationError, ComponentDefinition, ComponentSetDefinition, ChildNode, LayoutProps, StyleProps, RectangleNode, Organization } from '../types/schema';
 import { parseIconRef, isIconRegistry, IconRegistry } from '../types/iconRegistry';
+import { isRecord, isStringArray, isNumberArray, isValidNodeType, isString, isBoolean } from './typeGuards';
 
 export interface ParseResult extends ValidationResult {
   schema?: Schema;
@@ -169,7 +170,7 @@ export function parseSchema(jsonString: string): ParseResult {
   }
 
   // Step 2: Validate structure
-  if (typeof raw !== 'object' || raw === null) {
+  if (!isRecord(raw)) {
     return {
       valid: false,
       errors: [{ path: '', message: 'Schema must be an object' }],
@@ -178,7 +179,7 @@ export function parseSchema(jsonString: string): ParseResult {
     };
   }
 
-  const schema = raw as Record<string, unknown>;
+  const schema = raw;
   const result: Schema = {};
 
   // Validate organization
@@ -260,21 +261,21 @@ function validateComponent(comp: unknown, path: string): { errors: ValidationErr
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
 
-  if (typeof comp !== 'object' || comp === null) {
+  if (!isRecord(comp)) {
     errors.push({ path, message: 'Component must be an object' });
     return { errors, warnings };
   }
 
-  const c = comp as Record<string, unknown>;
+  const c = comp;
 
   // Required fields
-  if (!c.id || typeof c.id !== 'string') {
+  if (!isString(c.id)) {
     errors.push({ path, message: "Missing required field 'id'" });
   }
-  if (!c.name || typeof c.name !== 'string') {
+  if (!isString(c.name)) {
     errors.push({ path, message: "Missing required field 'name'" });
   }
-  if (!c.layout || typeof c.layout !== 'object') {
+  if (!isRecord(c.layout)) {
     errors.push({ path, message: "Missing required field 'layout'" });
   } else {
     const layoutErrors = validateLayout(c.layout, `${path}.layout`);
@@ -307,27 +308,27 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
 
-  if (typeof set !== 'object' || set === null) {
+  if (!isRecord(set)) {
     errors.push({ path, message: 'ComponentSet must be an object' });
     return { errors, warnings };
   }
 
-  const s = set as Record<string, unknown>;
+  const s = set;
 
   // Required fields
-  if (!s.id || typeof s.id !== 'string') {
+  if (!isString(s.id)) {
     errors.push({ path, message: "Missing required field 'id'" });
   }
-  if (!s.name || typeof s.name !== 'string') {
+  if (!isString(s.name)) {
     errors.push({ path, message: "Missing required field 'name'" });
   }
-  if (!Array.isArray(s.variantProps)) {
+  if (!isStringArray(s.variantProps)) {
     errors.push({ path, message: "Missing required field 'variantProps' (array)" });
   }
-  if (!s.base || typeof s.base !== 'object') {
+  if (!isRecord(s.base)) {
     errors.push({ path, message: "Missing required field 'base'" });
   } else {
-    const base = s.base as Record<string, unknown>;
+    const base = s.base;
     const baseErrors = validateLayout(base.layout, `${path}.base.layout`);
     errors.push(...baseErrors.errors);
     warnings.push(...baseErrors.warnings);
@@ -352,16 +353,16 @@ function validateComponentSet(set: unknown, path: string): { errors: ValidationE
     errors.push({ path: `${path}.variants`, message: 'componentSet must have at least one variant' });
   } else {
     s.variants.forEach((v, i) => {
-      if (typeof v !== 'object' || !v || !('props' in (v as object))) {
+      if (!isRecord(v) || !('props' in v)) {
         errors.push({ path: `${path}.variants[${i}]`, message: "Variant missing 'props'" });
       } else {
-        const variant = v as Record<string, unknown>;
+        const variant = v;
 
         // Validate variant props match variantProps keys
-        if (Array.isArray(s.variantProps) && variant.props && typeof variant.props === 'object') {
-          const variantProps = variant.props as Record<string, unknown>;
+        if (isStringArray(s.variantProps) && isRecord(variant.props)) {
+          const variantProps = variant.props;
           const variantKeys = Object.keys(variantProps);
-          const expectedKeys = s.variantProps as string[];
+          const expectedKeys = s.variantProps;
 
           // Check all expected keys are present
           expectedKeys.forEach(key => {
@@ -399,12 +400,12 @@ function validateLayout(layout: unknown, path: string): { errors: ValidationErro
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
 
-  if (typeof layout !== 'object' || layout === null) {
+  if (!isRecord(layout)) {
     errors.push({ path, message: 'Layout must be an object' });
     return { errors, warnings };
   }
 
-  const l = layout as Record<string, unknown>;
+  const l = layout;
 
   // Check for token/value conflicts
   if (l.padding !== undefined && l.paddingToken !== undefined) {
@@ -427,7 +428,7 @@ function validateLayout(layout: unknown, path: string): { errors: ValidationErro
   }
 
   // Validate wrap is boolean
-  if (l.wrap !== undefined && typeof l.wrap !== 'boolean') {
+  if (l.wrap !== undefined && !isBoolean(l.wrap)) {
     errors.push({ path, message: "wrap must be a boolean" });
   }
 
@@ -438,11 +439,11 @@ function validateStyleProps(props: unknown, path: string): { errors: ValidationE
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
 
-  if (typeof props !== 'object' || props === null) {
+  if (!isRecord(props)) {
     return { errors, warnings };
   }
 
-  const p = props as Record<string, unknown>;
+  const p = props;
 
   // Check for token/value conflicts
   if (p.opacity !== undefined && p.opacityToken !== undefined) {
@@ -466,10 +467,12 @@ function validateStyleProps(props: unknown, path: string): { errors: ValidationE
 
   // Validate strokeDash is array of numbers
   if (p.strokeDash !== undefined) {
-    if (!Array.isArray(p.strokeDash)) {
-      errors.push({ path, message: "strokeDash must be an array" });
-    } else if (!p.strokeDash.every((v: unknown) => typeof v === 'number')) {
-      errors.push({ path, message: "strokeDash must be an array of numbers" });
+    if (!isNumberArray(p.strokeDash)) {
+      if (!Array.isArray(p.strokeDash)) {
+        errors.push({ path, message: "strokeDash must be an array" });
+      } else {
+        errors.push({ path, message: "strokeDash must be an array of numbers" });
+      }
     }
   }
 
@@ -487,38 +490,38 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
     return { errors, warnings };
   }
 
-  if (typeof node !== 'object' || node === null) {
+  if (!isRecord(node)) {
     errors.push({ path, message: 'Node must be an object' });
     return { errors, warnings };
   }
 
-  const n = node as Record<string, unknown>;
+  const n = node;
 
-  if (!n.nodeType || typeof n.nodeType !== 'string') {
+  if (!isString(n.nodeType)) {
     errors.push({ path, message: "Missing required field 'nodeType'" });
     return { errors, warnings };
   }
 
-  const validTypes = ['frame', 'text', 'instance', 'rectangle', 'ellipse'];
-  if (!validTypes.includes(n.nodeType as string)) {
+  if (!isValidNodeType(n.nodeType)) {
+    const validTypes = ['frame', 'text', 'instance', 'rectangle', 'ellipse'];
     errors.push({ path, message: `Invalid nodeType '${n.nodeType}'. Must be one of: ${validTypes.join(', ')}` });
     return { errors, warnings };
   }
 
   // All nodes except instance require id (instance.id is optional per schema)
-  if (n.nodeType !== 'instance' && (!n.id || typeof n.id !== 'string')) {
+  if (n.nodeType !== 'instance' && !isString(n.id)) {
     errors.push({ path, message: "Missing required field 'id'" });
   }
 
-  if (!n.name || typeof n.name !== 'string') {
+  if (!isString(n.name)) {
     errors.push({ path, message: "Missing required field 'name'" });
   }
 
   // Instance-specific validation
   if (n.nodeType === 'instance') {
-    const hasRef = n.ref && typeof n.ref === 'string';
-    const hasComponentKey = n.componentKey && typeof n.componentKey === 'string';
-    const hasIconRef = n.iconRef && typeof n.iconRef === 'string';
+    const hasRef = isString(n.ref);
+    const hasComponentKey = isString(n.componentKey);
+    const hasIconRef = isString(n.iconRef);
 
     const refCount = [hasRef, hasComponentKey, hasIconRef].filter(Boolean).length;
 
@@ -529,8 +532,8 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
       errors.push({ path, message: "Instance can only have one of 'ref', 'componentKey', or 'iconRef'" });
     }
 
-    if (hasIconRef) {
-      const parsed = parseIconRef(n.iconRef as string);
+    if (hasIconRef && isString(n.iconRef)) {
+      const parsed = parseIconRef(n.iconRef);
       if (!parsed) {
         errors.push({ path, message: "Invalid iconRef format. Expected 'library:iconName' (e.g., 'lucide:search')" });
       }
@@ -547,7 +550,7 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
   // Validate imageUrl for frame and rectangle nodes
   if (n.nodeType === 'frame' || n.nodeType === 'rectangle') {
     if (n.imageUrl !== undefined) {
-      if (typeof n.imageUrl !== 'string') {
+      if (!isString(n.imageUrl)) {
         errors.push({ path: `${path}.imageUrl`, message: 'imageUrl must be a string' });
       } else if (!n.imageUrl.startsWith('http://') && !n.imageUrl.startsWith('https://')) {
         warnings.push({ path: `${path}.imageUrl`, message: 'imageUrl should be a valid HTTP(S) URL' });
@@ -555,7 +558,7 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
     }
     if (n.imageScaleMode !== undefined) {
       const validScaleModes = ['FILL', 'FIT', 'CROP', 'TILE'];
-      if (!validScaleModes.includes(n.imageScaleMode as string)) {
+      if (!isString(n.imageScaleMode) || !validScaleModes.includes(n.imageScaleMode)) {
         errors.push({ path: `${path}.imageScaleMode`, message: `imageScaleMode must be one of: ${validScaleModes.join(', ')}` });
       }
     }
@@ -581,16 +584,16 @@ function validateOrganization(org: unknown, path: string): { errors: ValidationE
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
 
-  if (typeof org !== 'object' || org === null) {
+  if (!isRecord(org)) {
     return { errors, warnings };
   }
 
-  const o = org as Record<string, unknown>;
+  const o = org;
 
   // Validate groupBy
   if (o.groupBy !== undefined) {
     const validGroupBy = ['category', 'tags', 'none'];
-    if (typeof o.groupBy !== 'string' || !validGroupBy.includes(o.groupBy)) {
+    if (!isString(o.groupBy) || !validGroupBy.includes(o.groupBy)) {
       const validOptions = validGroupBy.join(', ');
       errors.push({ path: `${path}.groupBy`, message: `groupBy must be one of: ${validOptions}` });
     }
@@ -599,7 +602,7 @@ function validateOrganization(org: unknown, path: string): { errors: ValidationE
   // Validate layout
   if (o.layout !== undefined) {
     const validLayout = ['frames', 'pages', 'grid'];
-    if (typeof o.layout !== 'string' || !validLayout.includes(o.layout)) {
+    if (!isString(o.layout) || !validLayout.includes(o.layout)) {
       const validOptions = validLayout.join(', ');
       errors.push({ path: `${path}.layout`, message: `layout must be one of: ${validOptions}` });
     }
@@ -622,19 +625,19 @@ function validateOrganization(org: unknown, path: string): { errors: ValidationE
   // Validate sortBy
   if (o.sortBy !== undefined) {
     const validSortBy = ['alphabetical', 'schema-order'];
-    if (typeof o.sortBy !== 'string' || !validSortBy.includes(o.sortBy)) {
+    if (!isString(o.sortBy) || !validSortBy.includes(o.sortBy)) {
       const validOptions = validSortBy.join(', ');
       errors.push({ path: `${path}.sortBy`, message: `sortBy must be one of: ${validOptions}` });
     }
   }
 
   // Validate frameLabels
-  if (o.frameLabels !== undefined && typeof o.frameLabels !== 'boolean') {
+  if (o.frameLabels !== undefined && !isBoolean(o.frameLabels)) {
     errors.push({ path: `${path}.frameLabels`, message: 'frameLabels must be a boolean' });
   }
 
   // Validate pagePrefixes
-  if (o.pagePrefixes !== undefined && typeof o.pagePrefixes !== 'boolean') {
+  if (o.pagePrefixes !== undefined && !isBoolean(o.pagePrefixes)) {
     errors.push({ path: `${path}.pagePrefixes`, message: 'pagePrefixes must be a boolean' });
   }
 
