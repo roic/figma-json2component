@@ -17,7 +17,11 @@
 - [Components (Standalone)](#components-standalone)
 - [Layout Properties](#layout-properties)
 - [Style Properties](#style-properties)
+  - [Gradient Fills](#gradient-fills)
+  - [Stroke Options](#stroke-options)
 - [Child Nodes](#child-nodes)
+  - [Background Blur](#background-blur)
+  - [Instance Overrides](#instance-overrides)
 - [Icon Libraries](#icon-libraries)
 - [Design Token Binding](#design-token-binding)
 - [Complete Examples](#complete-examples)
@@ -721,11 +725,15 @@ Visual styling with design token bindings.
 ```json
 {
   "fillToken": "color.surface",
+  "fill": { "type": "linear", "angle": 90, "stops": [...] },
   "strokeToken": "color.border",
   "strokeWidth": 1,
   "strokeDash": [4, 4],
+  "strokeAlign": "inside",
+  "strokeSides": ["top", "bottom"],
   "radiusToken": "radius.md",
   "shadowToken": "shadow.sm",
+  "backgroundBlur": 20,
   "opacity": 0.9,
   "opacityToken": "opacity.high",
   "fillOpacity": 0.5,
@@ -738,11 +746,15 @@ Visual styling with design token bindings.
 | Field | Type | Description | Figma Binding |
 |-------|------|-------------|---------------|
 | `fillToken` | string | Background color token | Color variable bound to fills |
+| `fill` | GradientFill | Gradient fill (linear or radial) | `fills` array with gradient paint |
 | `strokeToken` | string | Border color token | Color variable bound to strokes |
 | `strokeWidth` | number | Border width in pixels | `strokeWeight` |
 | `strokeDash` | number[] | Dash pattern for border | `dashPattern` (e.g., `[4, 4]` for dashed) |
+| `strokeAlign` | `"inside"` \| `"center"` \| `"outside"` | Stroke position | `strokeAlign` |
+| `strokeSides` | string[] | Sides to stroke | `strokeTopWeight`, etc. |
 | `radiusToken` | string | Corner radius token | Number variable bound to all 4 corners |
 | `shadowToken` | string | Shadow/effect token | Effect variable bound to effects |
+| `backgroundBlur` | number | Background blur amount | `BACKGROUND_BLUR` effect |
 | `opacity` | number (0-1) | Layer-level opacity | `node.opacity` |
 | `opacityToken` | string | Layer-level opacity token | Number variable bound to opacity |
 | `fillOpacity` | number (0-1) | Paint-level opacity | `paint.opacity` on fill |
@@ -807,6 +819,154 @@ Visual styling with design token bindings.
 - Values must be between 0 and 1
 - Both layer-level and paint-level opacity can be used together
 
+### Gradient Fills
+
+Instead of solid color tokens, you can use gradient fills for more complex backgrounds.
+
+#### Linear Gradient
+
+Creates a gradient along a straight line at a specified angle.
+
+```json
+{
+  "fill": {
+    "type": "linear",
+    "angle": 90,
+    "stops": [
+      { "position": 0, "colorToken": "color.primary.500" },
+      { "position": 1, "colorToken": "color.primary.700" }
+    ]
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `"linear"` | Linear gradient type |
+| `angle` | number | Gradient angle in degrees (0 = left-to-right, 90 = top-to-bottom) |
+| `stops` | GradientStop[] | Array of color stops |
+
+#### Radial Gradient
+
+Creates a gradient radiating from a center point.
+
+```json
+{
+  "fill": {
+    "type": "radial",
+    "centerX": 0.5,
+    "centerY": 0.5,
+    "stops": [
+      { "position": 0, "color": "#FFFFFF", "opacity": 1 },
+      { "position": 1, "color": "#000000", "opacity": 0.5 }
+    ]
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `type` | `"radial"` | | Radial gradient type |
+| `centerX` | number | 0.5 | Horizontal center (0-1, where 0.5 is center) |
+| `centerY` | number | 0.5 | Vertical center (0-1, where 0.5 is center) |
+| `stops` | GradientStop[] | | Array of color stops |
+
+#### Gradient Stops
+
+Each stop defines a color at a position along the gradient.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `position` | number | Position from 0 (start) to 1 (end) |
+| `color` | string | Hex color value (e.g., `"#FF5500"`) |
+| `colorToken` | string | Color token reference (alternative to `color`) |
+| `opacity` | number | Optional opacity (0-1), defaults to 1 |
+
+**Example - Button with gradient background:**
+```json
+{
+  "id": "gradient-button",
+  "name": "GradientButton",
+  "layout": { "direction": "horizontal", "padding": 16 },
+  "fill": {
+    "type": "linear",
+    "angle": 135,
+    "stops": [
+      { "position": 0, "colorToken": "color.accent.start" },
+      { "position": 1, "colorToken": "color.accent.end" }
+    ]
+  },
+  "radiusToken": "radius.md"
+}
+```
+
+### Stroke Options
+
+Additional stroke customization beyond color and width.
+
+#### Stroke Alignment
+
+Control where the stroke is drawn relative to the shape boundary.
+
+```json
+{
+  "strokeToken": "color.border",
+  "strokeWidth": 2,
+  "strokeAlign": "inside"
+}
+```
+
+| Value | Description |
+|-------|-------------|
+| `"center"` | Stroke centered on the boundary (default) |
+| `"inside"` | Stroke drawn inside the boundary |
+| `"outside"` | Stroke drawn outside the boundary |
+
+**Use cases:**
+- `inside` - Prevents stroke from affecting layout size
+- `outside` - For outline/halo effects
+- `center` - Default CSS-like behavior
+
+#### Individual Side Strokes
+
+Apply strokes to specific sides only (useful for borders, dividers).
+
+```json
+{
+  "strokeToken": "color.border",
+  "strokeWidth": 1,
+  "strokeSides": ["bottom"]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `strokeSides` | string[] | Array of sides: `"top"`, `"right"`, `"bottom"`, `"left"` |
+
+**Example - Card with bottom border:**
+```json
+{
+  "id": "list-item",
+  "name": "ListItem",
+  "layout": { "direction": "horizontal", "padding": 12 },
+  "strokeToken": "color.border.subtle",
+  "strokeWidth": 1,
+  "strokeSides": ["bottom"]
+}
+```
+
+**Example - Input field with underline:**
+```json
+{
+  "strokeToken": "color.border.input",
+  "strokeWidth": 2,
+  "strokeSides": ["bottom"],
+  "strokeAlign": "inside"
+}
+```
+
+**Note:** When using `strokeSides`, the stroke is applied only to the specified sides. All four sides can be combined: `["top", "right", "bottom", "left"]`.
+
 ---
 
 ## Child Nodes
@@ -865,6 +1025,28 @@ Nested frame with its own layout and children.
 - `children`: Array of child nodes (recursive)
 - `imageUrl`: URL to fetch and apply as image fill
 - `imageScaleMode`: `"FILL"` (default), `"FIT"`, `"CROP"`, or `"TILE"`
+- `backgroundBlur`: Blur amount in pixels (for glassmorphism effects)
+
+### Background Blur
+
+Apply a blur effect to content behind a frame (glassmorphism/frosted glass effect).
+
+```json
+{
+  "nodeType": "frame",
+  "id": "glass-card",
+  "name": "GlassCard",
+  "backgroundBlur": 20,
+  "fillToken": "color.surface.glass",
+  "fillOpacity": 0.7,
+  "radiusToken": "radius.lg"
+}
+```
+
+**Notes:**
+- Combine with semi-transparent fills (`fillOpacity`) for the best effect
+- Higher values (20-40) create a stronger frosted glass appearance
+- Works on frames, components, and component sets
 
 ---
 
@@ -1088,8 +1270,51 @@ References another component (local or from a published library).
 **Optional:**
 - `id`: Schema node ID (for tracking)
 - `variantProps`: Select variant (works with both `ref` and `componentKey`)
-- `overrides`: Text content overrides
+- `overrides`: Override nested elements (text, visibility, instance swaps)
 - `layout`: Override `width` and/or `height`
+
+### Instance Overrides
+
+The `overrides` object lets you customize nested elements within an instance by targeting them by name or ID.
+
+**Override types:**
+
+| Override | Type | Description |
+|----------|------|-------------|
+| `text` | string | Override text content |
+| `visible` | boolean | Show or hide the element |
+| `swap` | string | Swap instance using iconRef format (e.g., `"lucide:check"`) |
+| `swapComponentKey` | string | Swap instance using direct component key |
+| `swapRef` | string | Swap instance using local component ref |
+
+**Example - Combined overrides:**
+```json
+{
+  "nodeType": "instance",
+  "ref": "button",
+  "overrides": {
+    "icon": { "swap": "lucide:check" },
+    "label": { "text": "Confirm" },
+    "badge": { "visible": false }
+  }
+}
+```
+
+**Example - Swap with component key:**
+```json
+{
+  "nodeType": "instance",
+  "ref": "list-item",
+  "overrides": {
+    "avatar": { "swapComponentKey": "abc123def456..." },
+    "status": { "swapRef": "status-indicator" }
+  }
+}
+```
+
+**Override matching:** The plugin matches override keys to nested elements by:
+1. Schema node ID stored in pluginData (preferred)
+2. Element name (fallback for older components)
 
 **How to get a componentKey:**
 1. Ensure the library is enabled in your Figma file (Assets panel → Team library)
