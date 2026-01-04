@@ -1,7 +1,18 @@
 // src/core/generator/styles.ts
-import type { StyleProps } from '../../types/schema';
+import type { StyleProps, Gradient } from '../../types/schema';
 import { resolveVariable, formatResolutionError, validateVariableType } from '../tokenResolver';
 import { GenerationContext } from './types';
+
+/**
+ * Parse a hex color string to RGB values (0-1 range).
+ */
+function parseHexColor(hex: string): { r: number; g: number; b: number } {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16) / 255;
+  const g = parseInt(clean.substring(2, 4), 16) / 255;
+  const b = parseInt(clean.substring(4, 6), 16) / 255;
+  return { r, g, b };
+}
 
 /**
  * Validate that a URL is a valid HTTP/HTTPS URL.
@@ -63,6 +74,101 @@ export async function applyImageFill(
 }
 
 /**
+ * Apply a gradient fill to a node.
+ */
+export async function applyGradientFill(
+  node: FrameNode | ComponentNode | RectangleNode | EllipseNode,
+  gradient: Gradient,
+  context: GenerationContext
+): Promise<void> {
+  const gradientStops: ColorStop[] = [];
+
+  for (const stop of gradient.stops) {
+    let color: RGBA;
+
+    if (stop.colorToken) {
+      // Resolve color from token
+      const result = resolveVariable(stop.colorToken, context.variableMap);
+      if (result.value) {
+        const typeError = validateVariableType(result.value, 'COLOR', stop.colorToken, 'colorToken');
+        if (typeError) {
+          context.warnings.push(typeError);
+          continue;
+        }
+        // Get the resolved color value
+        try {
+          const collections = figma.variables.getLocalVariableCollections();
+          if (collections.length > 0) {
+            const modeId = collections[0].modes[0].modeId;
+            const resolved = result.value.valuesByMode[modeId];
+            if (typeof resolved === 'object' && 'r' in resolved) {
+              color = { ...(resolved as RGB), a: stop.opacity ?? 1 };
+            } else {
+              context.warnings.push(`Token '${stop.colorToken}' is not a color`);
+              continue;
+            }
+          } else {
+            context.warnings.push(`No variable collections found for gradient`);
+            continue;
+          }
+        } catch (err) {
+          context.warnings.push(`Failed to resolve color token '${stop.colorToken}'`);
+          continue;
+        }
+      } else {
+        context.warnings.push(formatResolutionError(stop.colorToken, result, 'variable'));
+        continue;
+      }
+    } else if (stop.color) {
+      const rgb = parseHexColor(stop.color);
+      color = { ...rgb, a: stop.opacity ?? 1 };
+    } else {
+      context.warnings.push('Gradient stop requires either color or colorToken');
+      continue;
+    }
+
+    gradientStops.push({
+      position: stop.position,
+      color,
+    });
+  }
+
+  if (gradientStops.length < 2) {
+    context.warnings.push('Gradient requires at least 2 valid stops');
+    return;
+  }
+
+  // Build gradient transform based on type and angle
+  let gradientTransform: Transform;
+
+  if (gradient.type === 'linear') {
+    const angleRad = ((gradient.angle ?? 0) * Math.PI) / 180;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+    gradientTransform = [
+      [cos, sin, 0.5 - cos * 0.5 - sin * 0.5],
+      [-sin, cos, 0.5 + sin * 0.5 - cos * 0.5],
+    ];
+  } else {
+    // Radial gradient centered at specified point
+    const cx = gradient.centerX ?? 0.5;
+    const cy = gradient.centerY ?? 0.5;
+    gradientTransform = [
+      [1, 0, cx - 0.5],
+      [0, 1, cy - 0.5],
+    ];
+  }
+
+  const paint: GradientPaint = {
+    type: gradient.type === 'linear' ? 'GRADIENT_LINEAR' : 'GRADIENT_RADIAL',
+    gradientStops,
+    gradientTransform,
+  };
+
+  node.fills = [paint];
+}
+
+/**
  * Apply style properties to a node.
  *
  * Handles the following style properties:
@@ -95,7 +201,7 @@ export async function applyStyles(
 ): Promise<void> {
   // Clear existing styles to ensure clean state (especially important for updates)
   // Only clear if the corresponding property is NOT specified to allow explicit control
-  if (!styles.fillToken && !styles.fillOpacity && !styles.fillOpacityToken) {
+  if (!styles.fill && !styles.fillToken && !styles.fillOpacity && !styles.fillOpacityToken) {
     node.fills = [];
   }
   if (!styles.strokeToken) {
@@ -105,8 +211,11 @@ export async function applyStyles(
     node.effects = [];
   }
 
-  // Fill
-  if (styles.fillToken) {
+  // Gradient fill (takes precedence over fillToken)
+  if (styles.fill) {
+    await applyGradientFill(node, styles.fill, context);
+    // Don't apply fillToken if gradient is set
+  } else if (styles.fillToken) {
     const result = resolveVariable(styles.fillToken, context.variableMap);
     if (result.value) {
       const typeError = validateVariableType(result.value, 'COLOR', styles.fillToken, 'fillToken');

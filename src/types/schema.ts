@@ -31,8 +31,33 @@ export interface LayoutProps {
   height?: SizeValue;
 }
 
+// ============ Gradient Types ============
+
+export interface GradientStop {
+  position: number;     // 0-1
+  color?: string;       // Hex color: "#FF0000"
+  colorToken?: string;  // Or token reference
+  opacity?: number;     // 0-1, defaults to 1
+}
+
+export interface LinearGradient {
+  type: 'linear';
+  angle?: number;       // Degrees, 0 = left-to-right, 90 = top-to-bottom
+  stops: GradientStop[];
+}
+
+export interface RadialGradient {
+  type: 'radial';
+  centerX?: number;     // 0-1, defaults to 0.5
+  centerY?: number;     // 0-1, defaults to 0.5
+  stops: GradientStop[];
+}
+
+export type Gradient = LinearGradient | RadialGradient;
+
 export interface StyleProps {
   fillToken?: string;
+  fill?: Gradient;  // Gradient fill
   strokeToken?: string;
   strokeWidth?: number;
   strokeDash?: number[];
