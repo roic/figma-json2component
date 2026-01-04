@@ -55,12 +55,17 @@ export interface RadialGradient {
 
 export type Gradient = LinearGradient | RadialGradient;
 
+export type StrokeAlign = 'inside' | 'center' | 'outside';
+export type StrokeSide = 'top' | 'right' | 'bottom' | 'left';
+
 export interface StyleProps {
   fillToken?: string;
   fill?: Gradient;  // Gradient fill
   strokeToken?: string;
   strokeWidth?: number;
   strokeDash?: number[];
+  strokeAlign?: StrokeAlign;
+  strokeSides?: StrokeSide[];
   radiusToken?: string;
   shadowToken?: string;
   opacity?: number;

@@ -304,6 +304,30 @@ export async function applyStyles(
     node.dashPattern = styles.strokeDash;
   }
 
+  // Stroke alignment
+  if (styles.strokeAlign) {
+    const alignMap: Record<string, 'INSIDE' | 'CENTER' | 'OUTSIDE'> = {
+      'inside': 'INSIDE',
+      'center': 'CENTER',
+      'outside': 'OUTSIDE',
+    };
+    if ('strokeAlign' in node) {
+      node.strokeAlign = alignMap[styles.strokeAlign];
+    }
+  }
+
+  // Individual stroke sides
+  if (styles.strokeSides && 'strokeTopWeight' in node) {
+    const weight = styles.strokeWidth ?? 1;
+    const sides = new Set(styles.strokeSides);
+
+    // Figma uses individual weights for each side
+    node.strokeTopWeight = sides.has('top') ? weight : 0;
+    node.strokeRightWeight = sides.has('right') ? weight : 0;
+    node.strokeBottomWeight = sides.has('bottom') ? weight : 0;
+    node.strokeLeftWeight = sides.has('left') ? weight : 0;
+  }
+
   // Radius (only for frames/components/rectangles)
   if (styles.radiusToken && 'cornerRadius' in node) {
     const result = resolveVariable(styles.radiusToken, context.variableMap);
