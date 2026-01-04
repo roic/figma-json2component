@@ -782,3 +782,309 @@ describe('parseSchemas multi-file', () => {
     expect(result.registries[0].library).toBe('lucide');
   });
 });
+
+describe('new feature validation', () => {
+  it('accepts valid linear gradient', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        fill: {
+          type: 'linear',
+          angle: 90,
+          stops: [
+            { position: 0, color: '#FF0000' },
+            { position: 1, color: '#0000FF' }
+          ]
+        }
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts valid radial gradient', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        fill: {
+          type: 'radial',
+          stops: [
+            { position: 0, color: '#FF0000' },
+            { position: 0.5, colorToken: 'colors.primary' },
+            { position: 1, color: '#0000FF' }
+          ]
+        }
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects gradient with invalid type', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        fill: {
+          type: 'conic',
+          stops: [
+            { position: 0, color: '#FF0000' },
+            { position: 1, color: '#0000FF' }
+          ]
+        }
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes("'linear' or 'radial'"))).toBe(true);
+  });
+
+  it('rejects gradient with less than 2 stops', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        fill: {
+          type: 'linear',
+          stops: [{ position: 0, color: '#FF0000' }]
+        }
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('2 stops'))).toBe(true);
+  });
+
+  it('rejects gradient stop with invalid position', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        fill: {
+          type: 'linear',
+          stops: [
+            { position: -0.5, color: '#FF0000' },
+            { position: 1, color: '#0000FF' }
+          ]
+        }
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('position must be 0-1'))).toBe(true);
+  });
+
+  it('rejects gradient stop without color or colorToken', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        fill: {
+          type: 'linear',
+          stops: [
+            { position: 0, color: '#FF0000' },
+            { position: 1 }
+          ]
+        }
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('color or colorToken'))).toBe(true);
+  });
+
+  it('rejects invalid strokeAlign', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        strokeAlign: 'invalid'
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes("strokeAlign must be 'inside', 'center', or 'outside'"))).toBe(true);
+  });
+
+  it('accepts valid strokeAlign values', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        strokeAlign: 'inside'
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects strokeSides that is not an array', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        strokeSides: 'top'
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('strokeSides must be an array'))).toBe(true);
+  });
+
+  it('rejects invalid strokeSides values', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        strokeSides: ['top', 'invalid', 'bottom']
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('Invalid strokeSide: invalid'))).toBe(true);
+  });
+
+  it('accepts valid strokeSides array', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        strokeSides: ['top', 'bottom']
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects multiple swap overrides', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'instance',
+          name: 'Icon',
+          ref: 'icon',
+          overrides: {
+            nested: { swap: 'lucide:check', swapRef: 'other' }
+          }
+        }]
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('Only one'))).toBe(true);
+  });
+
+  it('accepts single swap override', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'instance',
+          name: 'Icon',
+          ref: 'icon',
+          overrides: {
+            nested: { swap: 'lucide:check' }
+          }
+        }]
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts override with swapComponentKey', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'instance',
+          name: 'Icon',
+          ref: 'icon',
+          overrides: {
+            nested: { swapComponentKey: 'abc123' }
+          }
+        }]
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(true);
+  });
+
+  it('validates gradient in child frame nodes', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'frame',
+          id: 'inner',
+          name: 'Inner',
+          fill: {
+            type: 'invalid',
+            stops: [{ position: 0, color: '#FF0000' }]
+          }
+        }]
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes("'linear' or 'radial'"))).toBe(true);
+  });
+
+  it('rejects gradient stop with position greater than 1', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        fill: {
+          type: 'linear',
+          stops: [
+            { position: 0, color: '#FF0000' },
+            { position: 1.5, color: '#0000FF' }
+          ]
+        }
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('0-1'))).toBe(true);
+  });
+
+  it('rejects gradient with missing stops array', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        fill: {
+          type: 'linear'
+        }
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('2 stops'))).toBe(true);
+  });
+});

@@ -515,6 +515,44 @@ function validateStyleProps(props: unknown, path: string): { errors: ValidationE
     }
   }
 
+  // Validate gradient fill
+  if (p.fill && typeof p.fill === 'object' && !Array.isArray(p.fill)) {
+    const gradient = p.fill as Record<string, unknown>;
+    if (!gradient.type || !['linear', 'radial'].includes(gradient.type as string)) {
+      errors.push(createError('INVALID_VALUE', path, "Gradient 'type' must be 'linear' or 'radial'"));
+    }
+    if (!Array.isArray(gradient.stops) || gradient.stops.length < 2) {
+      errors.push(createError('INVALID_VALUE', path, 'Gradient requires at least 2 stops'));
+    } else {
+      for (let i = 0; i < gradient.stops.length; i++) {
+        const stop = gradient.stops[i] as Record<string, unknown>;
+        if (typeof stop.position !== 'number' || stop.position < 0 || stop.position > 1) {
+          errors.push(createError('INVALID_VALUE', `${path}.fill.stops[${i}]`, 'Stop position must be 0-1'));
+        }
+        if (!stop.color && !stop.colorToken) {
+          errors.push(createError('MISSING_REQUIRED', `${path}.fill.stops[${i}]`, 'Stop requires color or colorToken'));
+        }
+      }
+    }
+  }
+
+  // Validate stroke options
+  if (p.strokeAlign && !['inside', 'center', 'outside'].includes(p.strokeAlign as string)) {
+    errors.push(createError('INVALID_VALUE', path, "strokeAlign must be 'inside', 'center', or 'outside'"));
+  }
+  if (p.strokeSides) {
+    if (!Array.isArray(p.strokeSides)) {
+      errors.push(createError('INVALID_TYPE', path, 'strokeSides must be an array'));
+    } else {
+      const validSides = ['top', 'right', 'bottom', 'left'];
+      for (const side of p.strokeSides) {
+        if (!validSides.includes(side as string)) {
+          errors.push(createError('INVALID_VALUE', path, `Invalid strokeSide: ${side}`));
+        }
+      }
+    }
+  }
+
   return { errors, warnings };
 }
 
@@ -574,6 +612,19 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
       const parsed = parseIconRef(n.iconRef);
       if (!parsed) {
         errors.push(createError('INVALID_ICON_REF', path, "Invalid iconRef format. Expected 'library:iconName' (e.g., 'lucide:search')"));
+      }
+    }
+
+    // Validate instance overrides
+    if (n.overrides && isRecord(n.overrides)) {
+      for (const [nodeId, override] of Object.entries(n.overrides)) {
+        if (isRecord(override)) {
+          const swapCount = [override.swap, override.swapComponentKey, override.swapRef].filter(Boolean).length;
+          if (swapCount > 1) {
+            errors.push(createError('MUTUALLY_EXCLUSIVE', `${path}.overrides.${nodeId}`,
+              'Only one of swap, swapComponentKey, or swapRef can be specified'));
+          }
+        }
       }
     }
   }
