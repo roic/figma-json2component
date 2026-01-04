@@ -534,6 +534,92 @@ export async function createInstanceNode(
           targetNode.characters = override.text;
         }
       }
+
+      // Apply instance swap overrides
+      if (override.swap || override.swapComponentKey || override.swapRef) {
+        // Find nested instance by pluginData or name
+        let targetInstance = instance.findOne(n =>
+          n.type === 'INSTANCE' && n.getPluginData(PLUGIN_DATA_NODE_ID) === nodeId
+        ) as InstanceNode | null;
+
+        if (!targetInstance) {
+          targetInstance = instance.findOne(n =>
+            n.type === 'INSTANCE' && n.name === nodeId
+          ) as InstanceNode | null;
+
+          if (targetInstance) {
+            context.warnings.push(
+              `Instance swap for '${nodeId}' matched by name. Regenerate component for reliable matching.`
+            );
+          }
+        }
+
+        if (targetInstance) {
+          let swapComponent: ComponentNode | null = null;
+
+          // Resolve the swap target
+          if (override.swap) {
+            // iconRef format
+            const resolved = context.iconResolver.resolve(override.swap);
+            if (resolved.componentKey) {
+              try {
+                const imported = await figma.importComponentByKeyAsync(resolved.componentKey);
+                if (imported.type === 'COMPONENT') {
+                  swapComponent = imported;
+                } else if (imported.type === 'COMPONENT_SET') {
+                  if (imported.children.length === 0) {
+                    context.warnings.push(`Imported ComponentSet for swap '${override.swap}' has no variants`);
+                  } else {
+                    swapComponent = imported.children[0] as ComponentNode;
+                  }
+                }
+              } catch (err) {
+                const message = err instanceof Error ? err.message : 'Unknown error';
+                context.warnings.push(`Failed to import swap target '${override.swap}': ${message}`);
+              }
+            } else if (resolved.error) {
+              context.warnings.push(resolved.error);
+            }
+          } else if (override.swapComponentKey) {
+            try {
+              const imported = await figma.importComponentByKeyAsync(override.swapComponentKey);
+              if (imported.type === 'COMPONENT') {
+                swapComponent = imported;
+              } else if (imported.type === 'COMPONENT_SET') {
+                if (imported.children.length === 0) {
+                  context.warnings.push(`Imported ComponentSet for swap '${override.swapComponentKey}' has no variants`);
+                } else {
+                  swapComponent = imported.children[0] as ComponentNode;
+                }
+              }
+            } catch (err) {
+              const message = err instanceof Error ? err.message : 'Unknown error';
+              context.warnings.push(`Failed to import swap target '${override.swapComponentKey}': ${message}`);
+            }
+          } else if (override.swapRef) {
+            const target = context.componentMap.get(override.swapRef);
+            if (target) {
+              if (target.type === 'COMPONENT') {
+                swapComponent = target;
+              } else if (target.type === 'COMPONENT_SET') {
+                if (target.children.length === 0) {
+                  context.warnings.push(`ComponentSet for swap ref '${override.swapRef}' has no variants`);
+                } else {
+                  swapComponent = target.children[0] as ComponentNode;
+                }
+              }
+            } else {
+              context.warnings.push(`Swap ref '${override.swapRef}' not found`);
+            }
+          }
+
+          if (swapComponent) {
+            targetInstance.swapComponent(swapComponent);
+          }
+        } else {
+          context.warnings.push(`Instance '${nodeId}' not found for swap override`);
+        }
+      }
     }
   }
 

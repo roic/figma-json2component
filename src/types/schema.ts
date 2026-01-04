@@ -85,7 +85,12 @@ export interface InstanceNode {
   componentKey?: string;  // Published library component key
   iconRef?: string;       // Icon library reference (e.g., "lucide:search")
   variantProps?: Record<string, string>;
-  overrides?: Record<string, { text?: string }>;
+  overrides?: Record<string, {
+    text?: string;
+    swap?: string;              // iconRef format: "lucide:check"
+    swapComponentKey?: string;  // Direct component key
+    swapRef?: string;           // Local component reference
+  }>;
   layout?: Pick<LayoutProps, 'width' | 'height'>;
 }
 
