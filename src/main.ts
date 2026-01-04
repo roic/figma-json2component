@@ -98,6 +98,12 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
   if (msg.type === 'generate' && msg.payload) {
     const { json, jsonFiles, selectedIds } = msg.payload;
 
+    // Send progress: Resolving dependencies
+    figma.ui.postMessage({
+      type: 'generation-progress',
+      payload: { stage: 'Resolving dependencies...' }
+    });
+
     // Parse schema(s) - support both single file (legacy) and multiple files
     const parseResult = jsonFiles && jsonFiles.length > 0
       ? parseSchemas(jsonFiles)
@@ -118,6 +124,16 @@ figma.ui.onmessage = async (msg: { type: string; payload?: { json?: string; json
       figma.ui.postMessage({ type: 'generation-complete' });
       return;
     }
+
+    // Calculate components to generate
+    const componentsCount = (parseResult.schema.components?.length || 0) + (parseResult.schema.componentSets?.length || 0);
+    const toGenerateCount = selectedIds ? selectedIds.length : componentsCount;
+
+    // Send progress: Generating components
+    figma.ui.postMessage({
+      type: 'generation-progress',
+      payload: { stage: `Generating ${toGenerateCount} component${toGenerateCount !== 1 ? 's' : ''}...` }
+    });
 
     // Generate components
     const result = await generateFromSchema(parseResult.schema, selectedIds, parseResult.registries);

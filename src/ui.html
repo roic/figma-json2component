@@ -209,6 +209,17 @@
     button.warning:hover {
       background: #e69a00;
     }
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #e5e5e5;
+      border-top-color: #18a0fb;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -273,6 +284,13 @@
     <div style="font-weight: 500; margin-bottom: 8px;">Token status:</div>
     <div id="tokenStatus"></div>
     <div class="warnings hidden" id="tokenWarnings"></div>
+  </div>
+
+  <div id="progressSection" style="display: none;" class="section">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div class="spinner"></div>
+      <span id="progressText">Generating...</span>
+    </div>
   </div>
 
   <button class="primary" id="generateBtn" disabled>Generate Components</button>

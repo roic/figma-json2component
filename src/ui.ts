@@ -378,7 +378,16 @@ window.onmessage = (event) => {
     }
   }
 
+  if (msg.type === 'generation-progress') {
+    const progressSection = document.getElementById('progressSection')!;
+    const progressText = document.getElementById('progressText')!;
+
+    progressSection.style.display = 'block';
+    progressText.textContent = msg.payload.stage;
+  }
+
   if (msg.type === 'generation-complete') {
+    document.getElementById('progressSection')!.style.display = 'none';
     generateBtn.textContent = 'Generate Components';
     generateBtn.disabled = false;
     state.pendingGeneration = false;
