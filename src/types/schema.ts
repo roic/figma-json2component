@@ -90,6 +90,7 @@ export interface InstanceNode {
     swap?: string;              // iconRef format: "lucide:check"
     swapComponentKey?: string;  // Direct component key
     swapRef?: string;           // Local component reference
+    visible?: boolean;          // Toggle visibility
   }>;
   layout?: Pick<LayoutProps, 'width' | 'height'>;
 }

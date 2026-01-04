@@ -620,6 +620,30 @@ export async function createInstanceNode(
           context.warnings.push(`Instance '${nodeId}' not found for swap override`);
         }
       }
+
+      // Apply visibility overrides
+      if (override.visible !== undefined) {
+        // Find by pluginData first, fallback to name
+        let targetNode = instance.findOne(n =>
+          n.getPluginData(PLUGIN_DATA_NODE_ID) === nodeId
+        );
+
+        if (!targetNode) {
+          targetNode = instance.findOne(n => n.name === nodeId);
+
+          if (targetNode) {
+            context.warnings.push(
+              `Visibility override for '${nodeId}' matched by name. Regenerate component for reliable matching.`
+            );
+          }
+        }
+
+        if (targetNode) {
+          targetNode.visible = override.visible;
+        } else {
+          context.warnings.push(`Override target '${nodeId}' not found for visibility toggle`);
+        }
+      }
     }
   }
 
