@@ -2,7 +2,7 @@
 import type { ChildNode } from '../../types/schema';
 import { resolveVariable, resolveTextStyle, formatResolutionError, validateVariableType } from '../tokenResolver';
 import { GenerationContext, PLUGIN_DATA_NODE_ID } from './types';
-import { applyStyles, applyImageFill } from './styles';
+import { applyStyles, applyImageFill, applyBackgroundBlur } from './styles';
 import { applyLayout } from './layout';
 
 /**
@@ -68,6 +68,11 @@ export async function createFrameNode(
 
   if (def.layout) await applyLayout(frame, def.layout, context);
   await applyStyles(frame, def, context);
+
+  // Apply background blur for glassmorphism effect
+  if (def.backgroundBlur !== undefined) {
+    applyBackgroundBlur(frame, def.backgroundBlur);
+  }
 
   // Apply image fill if specified
   if (def.imageUrl) {

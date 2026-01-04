@@ -61,6 +61,7 @@ export interface FrameNode extends BaseNode {
   strokeWidth?: number;
   radiusToken?: string;
   shadowToken?: string;
+  backgroundBlur?: number;  // Blur radius in pixels for glassmorphism effect
   imageUrl?: string;
   imageScaleMode?: ImageScaleMode;
   children?: ChildNode[];

@@ -258,3 +258,30 @@ export async function applyStyles(
     node.opacity = styles.opacity;
   }
 }
+
+/**
+ * Apply background blur effect (glassmorphism) to a node.
+ *
+ * @param node - The node to apply blur to
+ * @param blur - Blur radius in pixels
+ */
+export function applyBackgroundBlur(
+  node: FrameNode | RectangleNode,
+  blur: number | undefined
+): void {
+  if (blur === undefined || blur <= 0) {
+    return;
+  }
+
+  const blurEffect: Effect = {
+    type: 'BACKGROUND_BLUR',
+    radius: blur,
+    visible: true,
+  };
+
+  // Preserve existing effects (like shadows) and add blur
+  const existingEffects = 'effects' in node ? [...node.effects] : [];
+  // Remove any existing background blur to avoid duplicates
+  const filteredEffects = existingEffects.filter(e => e.type !== 'BACKGROUND_BLUR');
+  node.effects = [...filteredEffects, blurEffect];
+}
