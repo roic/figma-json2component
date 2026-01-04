@@ -1030,6 +1030,27 @@ describe('new feature validation', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('rejects override with non-boolean visible', () => {
+    const json = JSON.stringify({
+      components: [{
+        id: 'card',
+        name: 'Card',
+        layout: {},
+        children: [{
+          nodeType: 'instance',
+          name: 'Icon',
+          ref: 'icon',
+          overrides: {
+            nested: { visible: 'true' }
+          }
+        }]
+      }]
+    });
+    const result = parseSchema(json);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('boolean'))).toBe(true);
+  });
+
   it('validates gradient in child frame nodes', () => {
     const json = JSON.stringify({
       components: [{

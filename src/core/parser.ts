@@ -624,6 +624,10 @@ function validateChildNode(node: unknown, path: string, depth: number = 0): { er
             errors.push(createError('MUTUALLY_EXCLUSIVE', `${path}.overrides.${nodeId}`,
               'Only one of swap, swapComponentKey, or swapRef can be specified'));
           }
+          if (override.visible !== undefined && typeof override.visible !== 'boolean') {
+            errors.push(createError('INVALID_TYPE', `${path}.overrides.${nodeId}.visible`,
+              'visible must be a boolean'));
+          }
         }
       }
     }
